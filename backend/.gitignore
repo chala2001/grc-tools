@@ -1,5 +1,4 @@
 # Binaries
-server
 *.exe
 
 # Environment
@@ -15,7 +14,7 @@ vendor/
 # OS files
 .DS_Store
 __MACOSX
-Thums.db
+Thumbs.db
 
 # Logs
 logs/
@@ -24,3 +23,6 @@ logs/
 *.test
 *.out
 coverage.out
+
+# Go binaries
+/bin

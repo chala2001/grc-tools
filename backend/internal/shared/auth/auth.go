@@ -24,6 +24,7 @@ import (
 	"net/http"
 
 	"github.com/wso2-open-operations/grc-platform/backend/internal/middleware"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/response"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/privilege"
 )
 
@@ -42,8 +43,13 @@ func FromContext(ctx context.Context) *UserInfo {
 // there is no privilege map in context and this returns true for all checks —
 // mirroring how token signature verification is also skipped in that mode.
 func HasPrivilege(ctx context.Context, priv string) bool {
+	// If the Auth middleware wasn't applied, fail closed.
+	if middleware.UserInfoFromContext(ctx) == nil {
+		return false
+	}
 	privs := privilege.FromContext(ctx)
 	if privs == nil {
+		// Local dev allow-all mode (no privilege store configured).
 		return true
 	}
 	return privs[priv]
@@ -59,8 +65,12 @@ func RequirePrivilege(w http.ResponseWriter, ctx context.Context, priv string) b
 	if HasPrivilege(ctx, priv) {
 		return true
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusForbidden)
-	_, _ = w.Write([]byte(`{"message":"Access to the requested resource is forbidden."}`))
+
+	response.WriteError(
+		w,
+		http.StatusForbidden,
+		response.ErrMsgForbidden,
+	)
+
 	return false
 }

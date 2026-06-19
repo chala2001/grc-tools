@@ -1,4 +1,4 @@
-BINARY := server
+BINARY := bin/server
 
 .PHONY: all setup vet test build clean
 
@@ -14,7 +14,8 @@ test: vet
 	go test -race ./...
 
 build: test
+	mkdir -p bin
 	go build -o $(BINARY) ./cmd/server
 
 clean:
-	rm -f $(BINARY)
+	rm -rf bin

@@ -41,6 +41,7 @@ func TestMain(m *testing.M) {
 	if err := testDB.Ping(); err != nil {
 		panic("integration: ping: " + err.Error())
 	}
-	defer testDB.Close()
-	os.Exit(m.Run())
+	exitCode := m.Run()
+	_ = testDB.Close()
+	os.Exit(exitCode)
 }

@@ -5,7 +5,7 @@ Go backend service for the Governance, Risk & Compliance (GRC) platform. The pla
 ## Quick Start
 
 ```bash
-# from grc-backend/
+# from backend/
 set -a && source .env && set +a && go run ./cmd/server
 ```
 
