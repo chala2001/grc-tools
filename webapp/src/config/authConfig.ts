@@ -25,6 +25,10 @@ export interface AuthConfig {
 
 const getAuthConfig = (): AuthConfig => {
   const config = window.config;
+  const defaultRedirectURL = new URL(
+    import.meta.env.BASE_URL,
+    window.location.origin,
+  ).toString();
   const isMockAuth = config?.GRC_PLATFORM_MOCK_AUTH === true;
   const baseUrl = config?.GRC_PLATFORM_AUTH_BASE_URL || "";
   const clientId = config?.GRC_PLATFORM_AUTH_CLIENT_ID || "";
@@ -38,9 +42,9 @@ const getAuthConfig = (): AuthConfig => {
     baseUrl,
     clientId,
     signInRedirectURL:
-      config?.GRC_PLATFORM_AUTH_SIGN_IN_REDIRECT_URL || window.location.origin + "/",
+      config?.GRC_PLATFORM_AUTH_SIGN_IN_REDIRECT_URL || defaultRedirectURL,
     signOutRedirectURL:
-      config?.GRC_PLATFORM_AUTH_SIGN_OUT_REDIRECT_URL || window.location.origin + "/",
+      config?.GRC_PLATFORM_AUTH_SIGN_OUT_REDIRECT_URL || defaultRedirectURL,
   };
 };
 

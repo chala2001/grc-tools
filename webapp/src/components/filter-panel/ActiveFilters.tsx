@@ -78,39 +78,39 @@ const ActiveFilters = <T extends Record<string, unknown>>({
         alignItems: "center",
       }}
     >
-      {filterFields.map((field) => {
-        const raw = appliedFilters[field.id];
-        const isActive = Boolean(raw);
-        const value = isActive ? String(raw) : "";
+      {filterFields
+        .filter((field) => {
+          const raw = appliedFilters[field.id];
+          return raw !== undefined && raw !== null && raw !== "";
+        })
+        .map((field) => {
+          const value = String(appliedFilters[field.id]);
+          const hasOptions = !!field.options?.length;
+          const canOpenMenu = field.enableMenu !== false && hasOptions;
 
-        const hasOptions = field.options && field.options.length > 0;
-
-        return (
-          <Box key={field.id} sx={{ display: "flex", alignItems: "center" }}>
-            {/* active filters chip */}
-            <Chip
-              label={value || field.label}
-              onClick={
-                hasOptions ? (e) => handleChipClick(field.id, e) : undefined
-              }
-              onDelete={
-                isActive ? () => onRemoveFilter(field.id as keyof T) : undefined
-              }
-              icon={hasOptions ? <ChevronDown size={14} /> : undefined}
-              size="small"
-              variant="outlined"
-              color={isActive ? "warning" : "default"}
-              sx={{
-                "& .MuiChip-label": { order: 1, pr: 1 },
-                "& .MuiChip-icon": { order: 2, mr: 0.5, ml: 0 },
-                "& .MuiChip-deleteIcon": { order: 3, ml: 0.5 },
-                backgroundColor: "background.paper",
-                cursor: hasOptions ? "pointer" : "default",
-              }}
-            />
-          </Box>
-        );
-      })}
+          return (
+            <Box key={field.id} sx={{ display: "flex", alignItems: "center" }}>
+              <Chip
+                label={value}
+                onClick={
+                  canOpenMenu ? (e) => handleChipClick(field.id, e) : undefined
+                }
+                onDelete={() => onRemoveFilter(field.id as keyof T)}
+                icon={canOpenMenu ? <ChevronDown size={14} /> : undefined}
+                size="small"
+                variant="outlined"
+                color="warning"
+                sx={{
+                  "& .MuiChip-label": { order: 1, pr: 1 },
+                  "& .MuiChip-icon": { order: 2, mr: 0.5, ml: 0 },
+                  "& .MuiChip-deleteIcon": { order: 3, ml: 0.5 },
+                  backgroundColor: "background.paper",
+                  cursor: canOpenMenu ? "pointer" : "default",
+                }}
+              />
+            </Box>
+          );
+        })}
 
       {/* active filters menu */}
       <Menu

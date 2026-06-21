@@ -42,12 +42,14 @@ const TabBar = ({
   tabs,
   activeTab,
   onTabChange,
+  className,
   sx,
   keepButtonWidth = false,
   compact = false,
 }: TabBarProps): JSX.Element => {
   return (
     <Card
+      className={className}
       role="tablist"
       sx={{
         display: "inline-flex",

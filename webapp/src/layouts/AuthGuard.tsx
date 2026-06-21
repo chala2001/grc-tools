@@ -16,9 +16,26 @@
 
 import { type JSX } from "react";
 import { ProtectedRoute } from "@asgardeo/react-router";
+import { Box, LinearProgress } from "@wso2/oxygen-ui";
 import AppLayout from "@layouts/AppLayout";
 
 const isMockAuth = window.config?.GRC_PLATFORM_MOCK_AUTH === true;
+
+const authLoader = (
+  <Box
+    sx={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      height: "100dvh",
+    }}
+  >
+    <LinearProgress
+      color="warning"
+      sx={{ width: "80%", maxWidth: 400, height: 4 }}
+    />
+  </Box>
+);
 
 export default function AuthGuard(): JSX.Element {
   if (isMockAuth) {
@@ -26,7 +43,7 @@ export default function AuthGuard(): JSX.Element {
   }
 
   return (
-    <ProtectedRoute loader={<AppLayout />}>
+    <ProtectedRoute loader={authLoader}>
       <AppLayout />
     </ProtectedRoute>
   );

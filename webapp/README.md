@@ -1,7 +1,6 @@
 # GRC Platform Webapp
 
-The GRC Platform Webapp is the React single-page application for WSO2 TrustHub — a
-governance, risk, and compliance platform. It hosts two modules behind a shared
+The GRC Platform Webapp is the React single-page application for a governance, risk, and compliance platform. It hosts two modules behind a shared
 shell:
 
 - **Audit Hub** — run SOC 2 / HIPAA / ISO 27001 audits: controls, evidence

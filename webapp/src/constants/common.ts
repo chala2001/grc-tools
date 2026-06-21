@@ -23,8 +23,8 @@ export const EMPTY_DROPDOWN_PLACEHOLDER = "Not available";
 /** Generic placeholder for empty/null value displays. */
 export const NULL_PLACEHOLDER = "--";
 
-// Auto-dismiss timeout in milliseconds (error and success banners).
-export const ERROR_BANNER_TIMEOUT_MS = 5000;
+// Auto-dismiss timeout in milliseconds (all banners).
+export const BANNER_TIMEOUT_MS = 5000;
 
 // Footer height in pixels.
 export const FOOTER_HEIGHT_PX = 64;

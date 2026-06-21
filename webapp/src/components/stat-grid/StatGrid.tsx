@@ -63,7 +63,7 @@ export interface StatGridProps<T extends string> {
  * @returns {string} A `repeat(..., minmax(0, 1fr))` track list.
  */
 function columnsFromSegment(segment: number): string {
-  const n = 12 / segment;
+  const n = Math.max(1, Math.floor(12 / segment));
   return `repeat(${n}, minmax(0, 1fr))`;
 }
 
@@ -162,55 +162,68 @@ export default function StatGrid<T extends string>({
                 <SecondaryIcon />
               </Box>
             )}
-            {stat.tooltipText && (
-              <Box
-                sx={{
-                  position: "absolute",
-                  top: 56,
-                  right: 14,
-                  zIndex: 2,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  color: "text.secondary",
-                  backgroundColor: "background.paper",
-                }}
-              >
-                <Tooltip title={stat.tooltipText}>
-                  <Box component="span" sx={{ display: "inline-flex" }}>
-                    <Info size={14} />
-                  </Box>
-                </Tooltip>
-              </Box>
-            )}
-            <StatCard
-              label={stat.label}
-              value={
-                (isLoading ? (
-                  <Skeleton
-                    data-testid="Skeleton"
-                    variant="rounded"
-                    width={60}
-                    height={24}
-                  />
-                ) : isError ? (
+            {isLoading ? (
+              <Skeleton
+                data-testid="Skeleton"
+                variant="rounded"
+                width="100%"
+                height={80}
+              />
+            ) : (
+              <>
+                {isError ? (
                   <Tooltip title={`Failed to load ${entityName}`}>
-                    <Box component="span" sx={{ color: "error.main" }}>
-                      —
+                    <Box
+                      component="span"
+                      sx={{
+                        position: "absolute",
+                        top: 16,
+                        right: 14,
+                        zIndex: 2,
+                        display: "inline-flex",
+                        color: "error.main",
+                        backgroundColor: "background.paper",
+                      }}
+                    >
+                      <Info size={14} />
                     </Box>
                   </Tooltip>
-                ) : stats?.[stat.key] != null ? (
-                  valueFormatter ? (
-                    valueFormatter(stats[stat.key] as number)
-                  ) : (
-                    stats[stat.key]
-                  )
-                ) : (
-                  "--"
-                )) as unknown as string | number
-              }
-              icon={<Icon />}
-              iconColor={stat.iconColor}
-            />
+                ) : stat.tooltipText ? (
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      top: 56,
+                      right: 14,
+                      zIndex: 2,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      color: "text.secondary",
+                      backgroundColor: "background.paper",
+                    }}
+                  >
+                    <Tooltip title={stat.tooltipText}>
+                      <Box component="span" sx={{ display: "inline-flex" }}>
+                        <Info size={14} />
+                      </Box>
+                    </Tooltip>
+                  </Box>
+                ) : null}
+                <StatCard
+                  label={stat.label}
+                  value={
+                    isError
+                      ? "—"
+                      : stats?.[stat.key] != null
+                      ? valueFormatter
+                        ? valueFormatter(stats[stat.key] as number)
+                        : (stats[stat.key] as number)
+                      : "--"
+                  }
+                  icon={<Icon />}
+                  iconColor={stat.iconColor}
+                />
+              </>
+            )}
           </Box>
         );
       })}

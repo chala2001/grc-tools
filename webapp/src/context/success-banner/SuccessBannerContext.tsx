@@ -26,7 +26,7 @@ import {
   type JSX,
 } from "react";
 
-import { ERROR_BANNER_TIMEOUT_MS } from "@constants/common";
+import { BANNER_TIMEOUT_MS } from "@constants/common";
 import { consumePendingSuccessMessage } from "@utils/sidebarStorage";
 
 interface SuccessBannerContextType {
@@ -79,7 +79,7 @@ export function SuccessBannerProvider({
 
     const timeoutId = setTimeout(() => {
       dismiss();
-    }, ERROR_BANNER_TIMEOUT_MS);
+    }, BANNER_TIMEOUT_MS);
 
     return () => {
       clearTimeout(timeoutId);

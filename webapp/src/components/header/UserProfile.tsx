@@ -45,7 +45,12 @@ export default function UserProfile(): JSX.Element {
   const [email, setEmail] = useState("");
 
   useEffect(() => {
-    if (isMockAuth || !isSignedIn) return;
+    if (isMockAuth || !isSignedIn) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale identity when user signs out
+      setName("");
+      setEmail("");
+      return;
+    }
     getDecodedIdToken()
       .then((token) => {
         const given = token?.given_name ?? "";
@@ -58,8 +63,12 @@ export default function UserProfile(): JSX.Element {
         setName(resolved);
         setEmail(token?.email ?? "");
       })
-      .catch(() => {});
-  }, [isSignedIn, getDecodedIdToken]);
+      .catch((error) => {
+        setName("");
+        setEmail("");
+        logger.error("Failed to decode ID token", error);
+      });
+  }, [isSignedIn, getDecodedIdToken, logger]);
 
   if (isMockAuth) return <MockUserProfile />;
 
