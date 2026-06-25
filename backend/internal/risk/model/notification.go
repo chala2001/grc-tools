@@ -18,7 +18,7 @@ package model
 
 // Notification represents an in-app notification, mapping to `risk_notification`.
 type Notification struct {
-	ID          int64  `json:"id"`
+	ID          int    `json:"id"`
 	RecipientID int    `json:"recipient_id"`
 	RiskID      *int   `json:"risk_id"`
 	Type        string `json:"type"`

@@ -274,6 +274,7 @@ func extractUserInfo(tokenStr string, cfg Config, keyFunc jwt.Keyfunc) (*UserInf
 			jwt.WithAudience(cfg.Audience),
 			jwt.WithLeeway(cfg.ClockSkew),
 			jwt.WithExpirationRequired(),
+			jwt.WithValidMethods([]string{"RS256"}),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("validate token: %w", err)

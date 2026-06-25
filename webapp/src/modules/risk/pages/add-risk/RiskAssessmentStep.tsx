@@ -116,7 +116,7 @@ export default function RiskAssessmentStep({ riskScores }: RiskAssessmentStepPro
               sx={{
                 display: "flex",
                 flexDirection: { xs: "column", sm: "row" },
-                gap: 30,
+                gap: 4,
                 alignItems: "flex-start",
               }}
             >

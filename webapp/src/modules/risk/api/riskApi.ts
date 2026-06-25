@@ -121,7 +121,7 @@ export function buildCreateRiskPayload(data: AddRiskFormValues): Record<string, 
   return {
     year: data.year,
     quarter: data.quarter,
-    source_register_id: data.sourceRegister,
+    source_register_id: data.sourceRegister !== "" ? data.sourceRegister : undefined,
     risk_title: data.riskTitle,
     risk_description: data.riskDescription,
     compliance_reference_ids: data.complianceReferences,
@@ -129,7 +129,7 @@ export function buildCreateRiskPayload(data: AddRiskFormValues): Record<string, 
     ...(data.identifiedByType === "EMPLOYEE"
       ? { identified_by_user_id: data.identifiedByEmployee !== "" ? data.identifiedByEmployee : undefined }
       : { identified_by_name: data.identifiedByName !== "" ? data.identifiedByName : undefined }),
-    assigner_id: data.assignedBy,
+    assigner_id: data.assignedBy !== "" ? data.assignedBy : undefined,
     risk_identified_date: data.riskIdentifiedDate
       ? formatDate(data.riskIdentifiedDate)
       : undefined,
@@ -142,9 +142,9 @@ export function buildCreateRiskPayload(data: AddRiskFormValues): Record<string, 
     reassessment_date: data.reassessmentDate
       ? formatDate(data.reassessmentDate)
       : undefined,
-    assignment_team_id: data.assignmentTeam,
-    owner_id: data.riskOwner,
-    action_owner_id: data.actionOwner,
+    assignment_team_id: data.assignmentTeam !== "" ? data.assignmentTeam : undefined,
+    owner_id: data.riskOwner !== "" ? data.riskOwner : undefined,
+    action_owner_id: data.actionOwner !== "" ? data.actionOwner : undefined,
     action_plan_description: data.actionPlanDescription,
     action_steps: data.actionSteps.map((s) => ({ description: s.description })),
     treatment_strategy: data.treatmentStrategy,
@@ -167,5 +167,8 @@ export async function createRisk(
 }
 
 function formatDate(d: Date): string {
-  return d.toISOString().slice(0, 10); // YYYY-MM-DD
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }

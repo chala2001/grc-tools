@@ -71,6 +71,9 @@ export default function EvidenceAttachments({
 
       {/* Drop zone */}
       <Box
+        role="button"
+        tabIndex={0}
+        aria-label="Upload evidence files"
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={() => setIsDragging(false)}
@@ -80,6 +83,12 @@ export default function EvidenceAttachments({
           if (e.dataTransfer.files) addFiles(e.dataTransfer.files);
         }}
         onClick={() => fileInputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            fileInputRef.current?.click();
+          }
+        }}
         sx={{
           border: "2px dashed",
           borderColor: isDragging ? "primary.main" : "divider",

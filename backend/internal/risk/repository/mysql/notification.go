@@ -33,10 +33,10 @@ func NewNotificationRepository(db *sql.DB) repository.NotificationRepository {
 
 func (r *riskNotificationRepository) List(ctx context.Context, recipientID int) ([]*model.Notification, error) {
 	// TODO: implement risk_notification list filtered by recipient_id
-	return nil, nil
+	return nil, errNotImplemented
 }
 
 func (r *riskNotificationRepository) MarkRead(ctx context.Context, id, recipientID int) error {
 	// TODO: UPDATE risk_notification SET is_read = TRUE WHERE id = ? AND recipient_id = ?
-	return nil
+	return errNotImplemented
 }

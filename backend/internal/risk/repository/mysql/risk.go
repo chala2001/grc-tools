@@ -43,6 +43,16 @@ func (r *riskRepository) NextSequenceID(ctx context.Context, sourceRegisterID, y
 		sourceRegisterID,
 	).Scan(&lastSeq)
 	if err == sql.ErrNoRows {
+		var exists bool
+		if existsErr := r.db.QueryRowContext(ctx,
+			"SELECT EXISTS(SELECT 1 FROM risk_team WHERE id = ?)",
+			sourceRegisterID,
+		).Scan(&exists); existsErr != nil {
+			return 0, fmt.Errorf("validate source register for preview: %w", existsErr)
+		}
+		if !exists {
+			return 0, fmt.Errorf("source register %d not found", sourceRegisterID)
+		}
 		return 1, nil
 	}
 	if err != nil {
@@ -234,12 +244,12 @@ func (r *riskRepository) GetByID(ctx context.Context, id int) (*model.Risk, erro
 
 func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRiskRequest, updatedBy string) error {
 	// TODO: UPDATE risk SET ... WHERE id = ?
-	return nil
+	return errNotImplemented
 }
 
 func (r *riskRepository) UpdateStatus(ctx context.Context, id int, status, updatedBy string) error {
 	// TODO: UPDATE risk SET workflow_status = ?, updated_by = ? WHERE id = ?
-	return nil
+	return errNotImplemented
 }
 
 // nullableString converts an empty string to nil so the DB stores NULL
