@@ -24,11 +24,11 @@ import (
 
 // Config holds all application configuration loaded from environment variables.
 type Config struct {
-    Port               string
-    DB                 DBConfig
-    Auth               AuthConfig
-    Azure              AzureConfig
-    CORSAllowedOrigin  string
+	Port               string
+	DB                 DBConfig
+	Auth               AuthConfig
+	Azure              AzureConfig
+	CORSAllowedOrigin  string
 }
 
 type DBConfig struct {
@@ -79,19 +79,19 @@ func Load() (Config, error) {
         return Config{}, err
     }
 
-    return Config{
-        Port: envOrDefault("PORT", ":8080"),
-        DB: DBConfig{
-            DSN: dsn,
-        },
-        Auth: authCfg,
-        Azure: AzureConfig{
-            StorageAccountName: os.Getenv("AZURE_STORAGE_ACCOUNT_NAME"),
-            StorageAccountKey:  os.Getenv("AZURE_STORAGE_ACCOUNT_KEY"),
-            ContainerName:      os.Getenv("AZURE_STORAGE_CONTAINER"),
-        },
-        CORSAllowedOrigin: envOrDefault("CORS_ALLOWED_ORIGIN", "http://localhost:3000"),
-    }, nil
+	return Config{
+		Port: envOrDefault("PORT", ":8080"),
+		DB: DBConfig{
+			DSN: dsn,
+		},
+		Auth: authCfg,
+		Azure: AzureConfig{
+			StorageAccountName: os.Getenv("AZURE_STORAGE_ACCOUNT_NAME"),
+			StorageAccountKey:  os.Getenv("AZURE_STORAGE_ACCOUNT_KEY"),
+			ContainerName:      os.Getenv("AZURE_STORAGE_CONTAINER"),
+		},
+		CORSAllowedOrigin: envOrDefault("CORS_ALLOWED_ORIGIN", "http://localhost:3000"),
+	}, nil
 }
 
 func mustEnv(key string) (string, error) {

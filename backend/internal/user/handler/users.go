@@ -17,20 +17,20 @@
 package handler
 
 import (
-    "net/http"
+	"net/http"
 
-    "github.com/wso2-open-operations/grc-platform/backend/internal/response"
-    userentity "github.com/wso2-open-operations/grc-platform/backend/internal/user"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/response"
+	userentity "github.com/wso2-open-operations/grc-platform/backend/internal/user"
 )
 
 // handleListUsers returns all active users. Used by both Risk and Audit form dropdowns.
 func handleListUsers(repo userentity.Repository) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        users, err := repo.List(r.Context())
-        if err != nil {
-            response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
-            return
-        }
-        response.WriteJSONValue(w, http.StatusOK, users)
-    }
+	return func(w http.ResponseWriter, r *http.Request) {
+		users, err := repo.List(r.Context())
+		if err != nil {
+			response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
+			return
+		}
+		response.WriteJSONValue(w, http.StatusOK, users)
+	}
 }

@@ -18,10 +18,14 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/wso2-open-operations/grc-platform/backend/internal/risk/model"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/risk/repository"
 )
+
+// errNotImplemented is returned by service stubs that are not yet implemented.
+var errNotImplemented = errors.New("not implemented")
 
 // ActionPlanService defines business operations for risk action plans and steps.
 type ActionPlanService interface {
@@ -44,35 +48,35 @@ func NewActionPlanService(repo repository.ActionPlanRepository) ActionPlanServic
 
 func (s *actionPlanService) List(ctx context.Context, riskID int) ([]*model.ActionPlan, error) {
 	// TODO: delegate to repo
-	return nil, nil
+	return nil, errNotImplemented
 }
 
 func (s *actionPlanService) GetByID(ctx context.Context, riskID, planID int) (*model.ActionPlan, error) {
 	// TODO: delegate to repo; verify plan belongs to riskID
-	return nil, nil
+	return nil, errNotImplemented
 }
 
 func (s *actionPlanService) Create(ctx context.Context, riskID int, req model.CreateActionPlanRequest, createdBy string) (*model.ActionPlan, error) {
 	// TODO: verify risk exists and is in a status that allows plan creation, delegate to repo
-	return nil, nil
+	return nil, errNotImplemented
 }
 
 func (s *actionPlanService) Update(ctx context.Context, riskID, planID int, req model.UpdateActionPlanRequest, updatedBy string) error {
 	// TODO: verify plan belongs to riskID, delegate to repo
-	return nil
+	return errNotImplemented
 }
 
 func (s *actionPlanService) ListSteps(ctx context.Context, planID int) ([]*model.ActionPlanStep, error) {
 	// TODO: delegate to repo, order by step_no
-	return nil, nil
+	return nil, errNotImplemented
 }
 
 func (s *actionPlanService) AddStep(ctx context.Context, planID int, req model.AddActionPlanStepRequest, createdBy string) (*model.ActionPlanStep, error) {
 	// TODO: determine next step_no, delegate to repo
-	return nil, nil
+	return nil, errNotImplemented
 }
 
 func (s *actionPlanService) UpdateStep(ctx context.Context, planID, stepID int, req model.UpdateActionPlanStepRequest, updatedBy string) error {
 	// TODO: verify step belongs to planID, delegate to repo
-	return nil
+	return errNotImplemented
 }

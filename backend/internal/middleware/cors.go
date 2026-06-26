@@ -22,23 +22,23 @@ import "net/http"
 // It must wrap the outermost handler so that OPTIONS preflight requests are answered
 // before they reach the auth middleware (which would reject them — no token is sent).
 func CORS(allowedOrigin string) func(http.Handler) http.Handler {
-    if allowedOrigin == "*" {
-        panic("cors: wildcard '*' is not a safe CORS origin; set CORS_ALLOWED_ORIGIN to a specific origin")
-    }
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-            w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-            w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, x-user-id-token, X-Correlation-ID")
-            w.Header().Set("Access-Control-Max-Age", "86400")
+	if allowedOrigin == "*" {
+		panic("cors: wildcard '*' is not a safe CORS origin; set CORS_ALLOWED_ORIGIN to a specific origin")
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, x-user-id-token, X-Correlation-ID")
+			w.Header().Set("Access-Control-Max-Age", "86400")
 
-            // Preflight — respond immediately without forwarding to the auth middleware.
-            if r.Method == http.MethodOptions {
-                w.WriteHeader(http.StatusNoContent)
-                return
-            }
+			// Preflight — respond immediately without forwarding to the auth middleware.
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 
-            next.ServeHTTP(w, r)
-        })
-    }
+			next.ServeHTTP(w, r)
+		})
+	}
 }
