@@ -1,0 +1,147 @@
+// Copyright (c) 2026 WSO2 LLC. (https://www.wso2.com).
+//
+// WSO2 LLC. licenses this file to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+package service
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/wso2-open-operations/grc-platform/backend/internal/apierror"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/model"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/audit/repository"
+)
+
+// validStatuses is the set of allowed control status transitions the API accepts directly.
+var validStatuses = map[string]bool{
+	"POPULATION_PENDING":           true,
+	"POPULATION_INTERNAL_REVIEW":   true,
+	"POPULATION_UNDER_VALIDATION":  true,
+	"POPULATION_NEED_CLARIFICATION": true,
+	"SUBMITTED_SAMPLE":             true,
+	"EVIDENCE_PENDING":             true,
+	"EVIDENCE_INTERNAL_REVIEW":     true,
+	"EVIDENCE_UNDER_VALIDATION":    true,
+	"COMPLETE":                     true,
+}
+
+// ControlService defines business operations for audit controls.
+type ControlService interface {
+	List(ctx context.Context, auditID int) ([]*model.AuditControl, error)
+	GetByID(ctx context.Context, auditID, controlID int) (*model.AuditControl, error)
+	Add(ctx context.Context, auditID int, req model.AddControlRequest, createdBy string) (*model.AuditControl, error)
+	BulkAdd(ctx context.Context, auditID int, reqs []model.AddControlRequest, createdBy string) ([]*model.AuditControl, error)
+	Update(ctx context.Context, auditID, controlID int, req model.UpdateControlRequest, updatedBy string) error
+	UpdateStatus(ctx context.Context, auditID, controlID int, req model.UpdateStatusRequest, updatedBy string) error
+	Delete(ctx context.Context, auditID, controlID int) error
+}
+
+type controlService struct {
+	repo repository.ControlRepository
+}
+
+func NewControlService(repo repository.ControlRepository) ControlService {
+	return &controlService{repo: repo}
+}
+
+func (s *controlService) List(ctx context.Context, auditID int) ([]*model.AuditControl, error) {
+	return s.repo.List(ctx, auditID)
+}
+
+func (s *controlService) GetByID(ctx context.Context, auditID, controlID int) (*model.AuditControl, error) {
+	c, err := s.repo.GetByID(ctx, auditID, controlID)
+	if err != nil {
+		return nil, err
+	}
+	if c == nil {
+		return nil, &apierror.Error{StatusCode: http.StatusNotFound, Body: "control not found"}
+	}
+	return c, nil
+}
+
+func (s *controlService) Add(ctx context.Context, auditID int, req model.AddControlRequest, createdBy string) (*model.AuditControl, error) {
+	if err := validateAddRequest(req); err != nil {
+		return nil, err
+	}
+	return s.repo.Create(ctx, auditID, req, createdBy)
+}
+
+func (s *controlService) BulkAdd(ctx context.Context, auditID int, reqs []model.AddControlRequest, createdBy string) ([]*model.AuditControl, error) {
+	if len(reqs) == 0 {
+		return []*model.AuditControl{}, nil
+	}
+	for _, req := range reqs {
+		if err := validateAddRequest(req); err != nil {
+			return nil, err
+		}
+	}
+	return s.repo.BulkCreate(ctx, auditID, reqs, createdBy)
+}
+
+func (s *controlService) Update(ctx context.Context, auditID, controlID int, req model.UpdateControlRequest, updatedBy string) error {
+	c, err := s.repo.GetByID(ctx, auditID, controlID)
+	if err != nil {
+		return err
+	}
+	if c == nil {
+		return &apierror.Error{StatusCode: http.StatusNotFound, Body: "control not found"}
+	}
+	return s.repo.Update(ctx, auditID, controlID, req, updatedBy)
+}
+
+func (s *controlService) UpdateStatus(ctx context.Context, auditID, controlID int, req model.UpdateStatusRequest, updatedBy string) error {
+	if !validStatuses[req.Status] {
+		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "invalid status value"}
+	}
+	c, err := s.repo.GetByID(ctx, auditID, controlID)
+	if err != nil {
+		return err
+	}
+	if c == nil {
+		return &apierror.Error{StatusCode: http.StatusNotFound, Body: "control not found"}
+	}
+	return s.repo.UpdateStatus(ctx, auditID, controlID, req.Status, req.Comment, updatedBy)
+}
+
+func (s *controlService) Delete(ctx context.Context, auditID, controlID int) error {
+	c, err := s.repo.GetByID(ctx, auditID, controlID)
+	if err != nil {
+		return err
+	}
+	if c == nil {
+		return &apierror.Error{StatusCode: http.StatusNotFound, Body: "control not found"}
+	}
+	return s.repo.Delete(ctx, auditID, controlID)
+}
+
+func validateAddRequest(req model.AddControlRequest) error {
+	if req.ControlNumber == "" {
+		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "controlNumber is required"}
+	}
+	if req.Description == "" {
+		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "description is required"}
+	}
+	if req.RequirementType != "DESIGN" && req.RequirementType != "OE" {
+		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "requirementType must be DESIGN or OE"}
+	}
+	if req.ControlType != "CONFIG" && req.ControlType != "NON_CONFIG" {
+		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "controlType must be CONFIG or NON_CONFIG"}
+	}
+	if req.Scope != "COMMON" && req.Scope != "PRODUCT_SPECIFIC" {
+		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "scope must be COMMON or PRODUCT_SPECIFIC"}
+	}
+	return nil
+}
