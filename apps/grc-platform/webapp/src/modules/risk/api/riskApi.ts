@@ -168,6 +168,15 @@ export interface ListRisksParams {
   level?: string;
   search?: string;
   risk_type?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export interface RiskListPage {
+  items: RiskListItem[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 export interface UpdateRiskPayload {
@@ -310,15 +319,17 @@ export async function createRisk(
 export async function fetchRisks(
   authFetch: AuthFetch,
   params: ListRisksParams = {},
-): Promise<RiskListItem[]> {
+): Promise<RiskListPage> {
   const q = new URLSearchParams();
   if (params.statuses?.length) q.set("statuses", params.statuses.join(","));
   if (params.team_id) q.set("team_id", String(params.team_id));
   if (params.level) q.set("level", params.level);
   if (params.search) q.set("search", params.search);
   if (params.risk_type) q.set("risk_type", params.risk_type);
+  if (params.offset !== undefined) q.set("offset", String(params.offset));
+  if (params.limit !== undefined) q.set("limit", String(params.limit));
   const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/risks?${q}`);
-  return handleResponse<RiskListItem[]>(res);
+  return handleResponse<RiskListPage>(res);
 }
 
 export async function fetchRiskDetail(

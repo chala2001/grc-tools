@@ -25,19 +25,25 @@ import (
 
 // RiskRepository is the data-access contract for risk records.
 type RiskRepository interface {
-	List(ctx context.Context, filter model.ListRisksFilter) ([]*model.RiskListItem, error)
+	List(ctx context.Context, filter model.ListRisksFilter) (*model.RiskListPage, error)
 	GetByID(ctx context.Context, id int) (*model.RiskDetail, error)
 	// GetWorkflowStatus is a lightweight single-column fetch for callers that only
 	// need to guard a workflow transition, avoiding GetByID's full join + related-entity queries.
 	GetWorkflowStatus(ctx context.Context, id int) (string, error)
 	Create(ctx context.Context, req model.CreateRiskRequest, createdBy string) (*model.CreateRiskResponse, error)
 	Update(ctx context.Context, id int, req model.UpdateRiskRequest, updatedBy string) error
-	UpdateStatus(ctx context.Context, id int, status, updatedBy string) error
-	SetRejection(ctx context.Context, id int, comment, stage, updatedBy string) error
-	ClearRejection(ctx context.Context, id int, updatedBy string) error
+	// TransitionStatus atomically moves a risk from fromStatus to toStatus using a
+	// conditional UPDATE (WHERE workflow_status = fromStatus). Returns 409 when 0 rows
+	// are affected, meaning another request already changed the status concurrently.
+	TransitionStatus(ctx context.Context, id int, fromStatus, toStatus, updatedBy string) error
+	// RejectTransition atomically writes the rejection comment and stage and moves the
+	// status to PENDING_REVISION in a single UPDATE (inherently atomic, no transaction needed).
+	RejectTransition(ctx context.Context, id int, comment, stage, fromStatus, updatedBy string) error
+	// ResubmitTransition atomically clears rejection info and advances the status from
+	// PENDING_REVISION to toStatus in a single UPDATE.
+	ResubmitTransition(ctx context.Context, id int, fromStatus, toStatus, updatedBy string) error
 	SetRiskType(ctx context.Context, id int, riskType, updatedBy string) error
 	SetOwnerFirstApprovedAt(ctx context.Context, id int, updatedBy string) error
-	Cancel(ctx context.Context, id int, updatedBy string) error
 	NextSequenceID(ctx context.Context, sourceRegisterID int) (int, error)
 }
 

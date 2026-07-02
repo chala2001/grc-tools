@@ -26,17 +26,18 @@ import (
 	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/auth"
 )
 
-// userEmail extracts the caller's email from the request context.
-// Falls back to the JWT subject if email is absent.
-func userEmail(r *http.Request) string {
+// requireUserEmail extracts the caller's email and writes a 401 when the
+// request carries no authenticated user. Returns ("", false) on failure.
+func requireUserEmail(w http.ResponseWriter, r *http.Request) (string, bool) {
 	user := auth.FromContext(r.Context())
 	if user == nil {
-		return ""
+		response.WriteError(w, http.StatusUnauthorized, response.ErrMsgUnauthorized)
+		return "", false
 	}
 	if user.Email != "" {
-		return user.Email
+		return user.Email, true
 	}
-	return user.Subject
+	return user.Subject, true
 }
 
 // parseRiskID extracts and validates the {id} path parameter.
@@ -77,12 +78,24 @@ func (d *Deps) handleListRisks(w http.ResponseWriter, r *http.Request) {
 	filter.Search = q.Get("search")
 	filter.RiskType = q.Get("risk_type")
 
-	items, err := d.Risk.List(r.Context(), filter)
+	filter.Limit = 50
+	if l := q.Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 && v <= 200 {
+			filter.Limit = v
+		}
+	}
+	if o := q.Get("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil && v >= 0 {
+			filter.Offset = v
+		}
+	}
+
+	page, err := d.Risk.List(r.Context(), filter)
 	if err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}
-	response.WriteJSONValue(w, http.StatusOK, items)
+	response.WriteJSONValue(w, http.StatusOK, page)
 }
 
 // handleGetRisk serves GET /api/v1/risks/{id}.
@@ -104,9 +117,8 @@ func (d *Deps) handleGetRisk(w http.ResponseWriter, r *http.Request) {
 // Updating any restricted field (implementation_date, email_subject, action_steps)
 // on an IN_REMEDIATION risk moves it to PENDING_AMENDMENT.
 func (d *Deps) handleUpdateRisk(w http.ResponseWriter, r *http.Request) {
-	user := auth.FromContext(r.Context())
-	if user == nil {
-		response.WriteError(w, http.StatusUnauthorized, response.ErrMsgUnauthorized)
+	by, ok := requireUserEmail(w, r)
+	if !ok {
 		return
 	}
 
@@ -133,7 +145,6 @@ func (d *Deps) handleUpdateRisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	by := userEmail(r)
 	if err := d.Risk.Update(r.Context(), id, req, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
@@ -144,11 +155,15 @@ func (d *Deps) handleUpdateRisk(w http.ResponseWriter, r *http.Request) {
 // handleOwnerApproveRisk serves POST /api/v1/risks/{id}/owner-approve.
 // Handles PENDING_RISK_OWNER_APPROVAL, PENDING_AMENDMENT, and PENDING_OWNER_COMPLETION_APPROVAL.
 func (d *Deps) handleOwnerApproveRisk(w http.ResponseWriter, r *http.Request) {
+	by, ok := requireUserEmail(w, r)
+	if !ok {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
 	}
-	if err := d.Risk.OwnerApprove(r.Context(), id, userEmail(r)); err != nil {
+	if err := d.Risk.OwnerApprove(r.Context(), id, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}
@@ -158,11 +173,15 @@ func (d *Deps) handleOwnerApproveRisk(w http.ResponseWriter, r *http.Request) {
 // handleManagementApproveRisk serves POST /api/v1/risks/{id}/management-approve.
 // Transitions PENDING_MANAGEMENT_APPROVAL → PENDING_COMPLIANCE_REVIEW.
 func (d *Deps) handleManagementApproveRisk(w http.ResponseWriter, r *http.Request) {
+	by, ok := requireUserEmail(w, r)
+	if !ok {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
 	}
-	if err := d.Risk.ManagementApprove(r.Context(), id, userEmail(r)); err != nil {
+	if err := d.Risk.ManagementApprove(r.Context(), id, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}
@@ -172,11 +191,15 @@ func (d *Deps) handleManagementApproveRisk(w http.ResponseWriter, r *http.Reques
 // handleApproveRisk serves POST /api/v1/risks/{id}/approve.
 // Compliance approval: PENDING_COMPLIANCE_REVIEW → IN_REMEDIATION.
 func (d *Deps) handleApproveRisk(w http.ResponseWriter, r *http.Request) {
+	by, ok := requireUserEmail(w, r)
+	if !ok {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
 	}
-	if err := d.Risk.Approve(r.Context(), id, userEmail(r)); err != nil {
+	if err := d.Risk.Approve(r.Context(), id, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}
@@ -186,6 +209,10 @@ func (d *Deps) handleApproveRisk(w http.ResponseWriter, r *http.Request) {
 // handleRejectRisk serves POST /api/v1/risks/{id}/reject.
 // Routes to PENDING_REVISION from any pending-approval stage; stores rejection_stage.
 func (d *Deps) handleRejectRisk(w http.ResponseWriter, r *http.Request) {
+	by, ok := requireUserEmail(w, r)
+	if !ok {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
@@ -196,7 +223,7 @@ func (d *Deps) handleRejectRisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := d.Risk.Reject(r.Context(), id, req, userEmail(r)); err != nil {
+	if err := d.Risk.Reject(r.Context(), id, req, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}
@@ -206,11 +233,15 @@ func (d *Deps) handleRejectRisk(w http.ResponseWriter, r *http.Request) {
 // handleCompleteRisk serves POST /api/v1/risks/{id}/complete.
 // Transitions IN_REMEDIATION → PENDING_OWNER_COMPLETION_APPROVAL.
 func (d *Deps) handleCompleteRisk(w http.ResponseWriter, r *http.Request) {
+	by, ok := requireUserEmail(w, r)
+	if !ok {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
 	}
-	if err := d.Risk.Complete(r.Context(), id, userEmail(r)); err != nil {
+	if err := d.Risk.Complete(r.Context(), id, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}
@@ -220,11 +251,15 @@ func (d *Deps) handleCompleteRisk(w http.ResponseWriter, r *http.Request) {
 // handleResubmitRisk serves POST /api/v1/risks/{id}/resubmit.
 // Transitions PENDING_REVISION → PENDING_RISK_OWNER_APPROVAL and clears rejection info.
 func (d *Deps) handleResubmitRisk(w http.ResponseWriter, r *http.Request) {
+	by, ok := requireUserEmail(w, r)
+	if !ok {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
 	}
-	if err := d.Risk.Resubmit(r.Context(), id, userEmail(r)); err != nil {
+	if err := d.Risk.Resubmit(r.Context(), id, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}
@@ -234,11 +269,15 @@ func (d *Deps) handleResubmitRisk(w http.ResponseWriter, r *http.Request) {
 // handleCancelRisk serves POST /api/v1/risks/{id}/cancel.
 // Soft-deletes a risk by moving it to CANCELLED. Only valid from PENDING_RISK_OWNER_APPROVAL.
 func (d *Deps) handleCancelRisk(w http.ResponseWriter, r *http.Request) {
+	by, ok := requireUserEmail(w, r)
+	if !ok {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
 	}
-	if err := d.Risk.Cancel(r.Context(), id, userEmail(r)); err != nil {
+	if err := d.Risk.Cancel(r.Context(), id, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}
@@ -248,11 +287,15 @@ func (d *Deps) handleCancelRisk(w http.ResponseWriter, r *http.Request) {
 // handleCloseRisk serves POST /api/v1/risks/{id}/close.
 // Transitions PENDING_COMPLIANCE_CLOSURE → CLOSED.
 func (d *Deps) handleCloseRisk(w http.ResponseWriter, r *http.Request) {
+	by, ok := requireUserEmail(w, r)
+	if !ok {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
 	}
-	if err := d.Risk.Close(r.Context(), id, userEmail(r)); err != nil {
+	if err := d.Risk.Close(r.Context(), id, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}

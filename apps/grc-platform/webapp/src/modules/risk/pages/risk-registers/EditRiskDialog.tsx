@@ -186,6 +186,9 @@ export default function EditRiskDialog({
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     if (mode === "full") {
       if (!riskTitle.trim()) e.riskTitle = "Risk title is required.";
       if (!riskDescription.trim()) e.riskDescription = "Risk description is required.";
@@ -195,6 +198,15 @@ export default function EditRiskDialog({
       if ((identifiedByType === "EXTERNAL_PERSON" || identifiedByType === "TOOL") && !identifiedByName.trim()) {
         e.identifiedByName = "Please enter the name of who identified this risk.";
       }
+      if (riskIdentifiedDate && riskIdentifiedDate > today) {
+        e.riskIdentifiedDate = "Risk identified date cannot be in the future.";
+      }
+      if (reassessmentDate && reassessmentDate < today) {
+        e.reassessmentDate = "Reassessment date cannot be in the past.";
+      }
+    }
+    if (implementationDate && implementationDate < today) {
+      e.implementationDate = "Implementation date cannot be in the past.";
     }
     if (!emailSubject.trim()) e.emailSubject = "Email subject is required.";
     actionSteps.forEach((s, i) => {
@@ -350,10 +362,11 @@ export default function EditRiskDialog({
                   <DatePicker
                     label="Implementation Date"
                     value={implementationDate}
-                    onChange={(d) => setImplementationDate(d)}
+                    onChange={(d) => { setImplementationDate(d); if (errors.implementationDate) setErrors((p) => ({ ...p, implementationDate: "" })); }}
+                    disablePast
                     slotProps={{
                       desktopPaper: { sx: datepickerPaperSx },
-                      textField: { fullWidth: true, disabled: submitting },
+                      textField: { fullWidth: true, disabled: submitting, error: !!errors.implementationDate, helperText: errors.implementationDate },
                     }}
                   />
                 </LocalizationProvider>
@@ -419,8 +432,9 @@ export default function EditRiskDialog({
                     <DatePicker
                       label="Risk Identified Date"
                       value={riskIdentifiedDate}
-                      onChange={(d) => setRiskIdentifiedDate(d)}
-                      slotProps={{ desktopPaper: { sx: datepickerPaperSx }, textField: { fullWidth: true, disabled: submitting } }}
+                      onChange={(d) => { setRiskIdentifiedDate(d); if (errors.riskIdentifiedDate) setErrors((p) => ({ ...p, riskIdentifiedDate: "" })); }}
+                      disableFuture
+                      slotProps={{ desktopPaper: { sx: datepickerPaperSx }, textField: { fullWidth: true, disabled: submitting, error: !!errors.riskIdentifiedDate, helperText: errors.riskIdentifiedDate } }}
                     />
                   </LocalizationProvider>
                   <FormControl fullWidth disabled={submitting}>
@@ -547,16 +561,18 @@ export default function EditRiskDialog({
                     <DatePicker
                       label="Implementation Date"
                       value={implementationDate}
-                      onChange={(d) => setImplementationDate(d)}
-                      slotProps={{ desktopPaper: { sx: datepickerPaperSx }, textField: { fullWidth: true, disabled: submitting } }}
+                      onChange={(d) => { setImplementationDate(d); if (errors.implementationDate) setErrors((p) => ({ ...p, implementationDate: "" })); }}
+                      disablePast
+                      slotProps={{ desktopPaper: { sx: datepickerPaperSx }, textField: { fullWidth: true, disabled: submitting, error: !!errors.implementationDate, helperText: errors.implementationDate } }}
                     />
                   </LocalizationProvider>
                   <LocalizationProvider dateAdapter={AdapterDateFns}>
                     <DatePicker
                       label="Reassessment Date"
                       value={reassessmentDate}
-                      onChange={(d) => setReassessmentDate(d)}
-                      slotProps={{ desktopPaper: { sx: datepickerPaperSx }, textField: { fullWidth: true, disabled: submitting } }}
+                      onChange={(d) => { setReassessmentDate(d); if (errors.reassessmentDate) setErrors((p) => ({ ...p, reassessmentDate: "" })); }}
+                      disablePast
+                      slotProps={{ desktopPaper: { sx: datepickerPaperSx }, textField: { fullWidth: true, disabled: submitting, error: !!errors.reassessmentDate, helperText: errors.reassessmentDate } }}
                     />
                   </LocalizationProvider>
                 </Stack>

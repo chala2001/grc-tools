@@ -108,13 +108,23 @@ type NextSequenceIDResponse struct {
 	NextSequenceID int `json:"next_sequence_id"`
 }
 
-// ListRisksFilter holds query parameters for filtering the risk list.
+// ListRisksFilter holds query parameters for filtering and paginating the risk list.
 type ListRisksFilter struct {
 	Statuses []string // workflow_status values to include (empty = all)
 	TeamID   int      // source_register_id; 0 = all
 	Level    string   // LOW / MEDIUM / HIGH; empty = all
 	Search   string   // matched against risk_code and risk_title
 	RiskType string   // NEW / UPDATED; empty = all
+	Limit    int      // rows per page; handler enforces a sensible default and max
+	Offset   int      // zero-based row offset
+}
+
+// RiskListPage is the paginated response for GET /api/v1/risks.
+type RiskListPage struct {
+	Items  []*RiskListItem `json:"items"`
+	Total  int             `json:"total"`
+	Offset int             `json:"offset"`
+	Limit  int             `json:"limit"`
 }
 
 // RiskListItem is the lightweight DTO returned by GET /api/v1/risks.

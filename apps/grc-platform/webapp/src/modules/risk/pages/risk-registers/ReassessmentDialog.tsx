@@ -15,6 +15,7 @@
 // under the License.
 
 import { useState } from "react";
+import { toDateOnlyString } from "@utils/dateTime";
 import {
   AdapterDateFns,
   Alert,
@@ -74,7 +75,13 @@ export default function ReassessmentDialog({
     const e: Record<string, string> = {};
     if (!likelihood || !impact) e.grid = "Please select a residual risk score from the grid.";
     if (!progress.trim()) e.progress = "Progress is required.";
-    if (!reassessmentDate) e.reassessmentDate = "Reassessment date is required.";
+    if (!reassessmentDate) {
+      e.reassessmentDate = "Reassessment date is required.";
+    } else {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (reassessmentDate < today) e.reassessmentDate = "Reassessment date cannot be in the past.";
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -84,14 +91,11 @@ export default function ReassessmentDialog({
     setSubmitting(true);
     setApiError("");
     try {
-      const y = reassessmentDate!.getFullYear();
-      const m = String(reassessmentDate!.getMonth() + 1).padStart(2, "0");
-      const d = String(reassessmentDate!.getDate()).padStart(2, "0");
       await onSubmit({
         likelihood,
         impact,
         progress: progress.trim(),
-        reassessment_date: `${y}-${m}-${d}`,
+        reassessment_date: toDateOnlyString(reassessmentDate)!,
       });
       handleClose();
     } catch (e: unknown) {
@@ -174,6 +178,7 @@ export default function ReassessmentDialog({
                 setReassessmentDate(d);
                 if (errors.reassessmentDate) setErrors((prev) => ({ ...prev, reassessmentDate: "" }));
               }}
+              disablePast
               slotProps={{
                 desktopPaper: {
                   sx: {

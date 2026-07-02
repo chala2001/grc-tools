@@ -153,7 +153,7 @@ func (r *riskRepository) Create(ctx context.Context, req model.CreateRiskRequest
 			?, ?, ?,
 			?, ?,
 			?, ?, ?,
-			'PENDING_RISK_OWNER_APPROVAL', ?, ?
+			?, ?, ?
 		)`,
 		req.Year, req.SourceRegisterID, req.Quarter, riskCode,
 		req.RiskTitle, req.RiskDescription, nullableString(req.RiskIdentifiedDate),
@@ -162,7 +162,7 @@ func (r *riskRepository) Create(ctx context.Context, req model.CreateRiskRequest
 		req.TreatmentStrategy, req.AssignmentTeamID, nullableString(req.Progress),
 		nullableString(req.ImplementationDate), nullableString(req.ReassessmentDate),
 		nullableString(req.GitIssueURL), nullableString(req.EmailSubject), nullableString(req.Remarks),
-		createdBy, createdBy,
+		model.StatusPendingOwnerApproval, createdBy, createdBy,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert risk: %w", err)
@@ -238,7 +238,7 @@ func (r *riskRepository) Create(ctx context.Context, req model.CreateRiskRequest
 	return &model.CreateRiskResponse{ID: riskID, RiskCode: riskCode}, nil
 }
 
-func (r *riskRepository) List(ctx context.Context, filter model.ListRisksFilter) ([]*model.RiskListItem, error) {
+func (r *riskRepository) List(ctx context.Context, filter model.ListRisksFilter) (*model.RiskListPage, error) {
 	query := `
 		SELECT r.id, r.risk_code, r.risk_title,
 		       st.name  AS source_register_name,
@@ -251,7 +251,8 @@ func (r *riskRepository) List(ctx context.Context, filter model.ListRisksFilter)
 		       r.implementation_date,
 		       r.rejection_comment,
 		       r.rejection_stage,
-		       r.created_at
+		       r.created_at,
+		       COUNT(*) OVER() AS total_count
 		FROM risk r
 		LEFT JOIN risk_team st ON st.id = r.source_register_id
 		LEFT JOIN risk_score rs ON rs.id = r.gross_score_id
@@ -290,7 +291,8 @@ func (r *riskRepository) List(ctx context.Context, filter model.ListRisksFilter)
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}
-	query += " ORDER BY r.created_at DESC"
+	query += " ORDER BY r.created_at DESC LIMIT ? OFFSET ?"
+	args = append(args, filter.Limit, filter.Offset)
 
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -298,7 +300,11 @@ func (r *riskRepository) List(ctx context.Context, filter model.ListRisksFilter)
 	}
 	defer rows.Close()
 
-	out := make([]*model.RiskListItem, 0)
+	page := &model.RiskListPage{
+		Items:  make([]*model.RiskListItem, 0),
+		Offset: filter.Offset,
+		Limit:  filter.Limit,
+	}
 	for rows.Next() {
 		var item model.RiskListItem
 		var createdAt []byte
@@ -308,13 +314,14 @@ func (r *riskRepository) List(ctx context.Context, filter model.ListRisksFilter)
 			&item.OwnerName, &item.AssignerName,
 			&item.WorkflowStatus, &item.RiskType, &item.ImplementationDate,
 			&item.RejectionComment, &item.RejectionStage, &createdAt,
+			&page.Total,
 		); err != nil {
 			return nil, fmt.Errorf("scan risk list item: %w", err)
 		}
 		item.CreatedAt = string(createdAt)
-		out = append(out, &item)
+		page.Items = append(page.Items, &item)
 	}
-	return out, rows.Err()
+	return page, rows.Err()
 }
 
 func (r *riskRepository) GetByID(ctx context.Context, id int) (*model.RiskDetail, error) {
@@ -669,10 +676,10 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 
 	// If a restricted field changed on an IN_REMEDIATION risk, atomically mark it
 	// as UPDATED and move it to PENDING_AMENDMENT in the same transaction.
-	if restrictedChanged && curStatus.String == "IN_REMEDIATION" {
+	if restrictedChanged && curStatus.String == model.StatusInRemediation {
 		if _, err = tx.ExecContext(ctx,
-			"UPDATE risk SET risk_type = 'UPDATED', workflow_status = 'PENDING_AMENDMENT', updated_by = ?, updated_at = NOW() WHERE id = ?",
-			updatedBy, id,
+			"UPDATE risk SET risk_type = ?, workflow_status = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
+			model.RiskTypeUpdated, model.StatusPendingAmendment, updatedBy, id,
 		); err != nil {
 			return fmt.Errorf("set amendment status: %w", err)
 		}
@@ -681,28 +688,64 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 	return tx.Commit()
 }
 
-func (r *riskRepository) UpdateStatus(ctx context.Context, id int, status, updatedBy string) error {
-	_, err := r.db.ExecContext(ctx,
-		"UPDATE risk SET workflow_status = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
-		status, updatedBy, id,
+func (r *riskRepository) TransitionStatus(ctx context.Context, id int, fromStatus, toStatus, updatedBy string) error {
+	res, err := r.db.ExecContext(ctx,
+		"UPDATE risk SET workflow_status = ?, updated_by = ?, updated_at = NOW() WHERE id = ? AND workflow_status = ?",
+		toStatus, updatedBy, id, fromStatus,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("transition status: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("transition status rows: %w", err)
+	}
+	if n == 0 {
+		return &apierror.Error{StatusCode: http.StatusConflict, Body: "concurrent modification: workflow status changed"}
+	}
+	return nil
 }
 
-func (r *riskRepository) SetRejection(ctx context.Context, id int, comment, stage, updatedBy string) error {
-	_, err := r.db.ExecContext(ctx,
-		"UPDATE risk SET rejection_comment = ?, rejection_stage = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
-		comment, stage, updatedBy, id,
+func (r *riskRepository) RejectTransition(ctx context.Context, id int, comment, stage, fromStatus, updatedBy string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE risk
+		 SET rejection_comment = ?, rejection_stage = ?, workflow_status = ?,
+		     updated_by = ?, updated_at = NOW()
+		 WHERE id = ? AND workflow_status = ?`,
+		comment, stage, model.StatusPendingRevision, updatedBy, id, fromStatus,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("reject transition: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("reject transition rows: %w", err)
+	}
+	if n == 0 {
+		return &apierror.Error{StatusCode: http.StatusConflict, Body: "concurrent modification: workflow status changed"}
+	}
+	return nil
 }
 
-func (r *riskRepository) ClearRejection(ctx context.Context, id int, updatedBy string) error {
-	_, err := r.db.ExecContext(ctx,
-		"UPDATE risk SET rejection_comment = NULL, rejection_stage = NULL, updated_by = ?, updated_at = NOW() WHERE id = ?",
-		updatedBy, id,
+func (r *riskRepository) ResubmitTransition(ctx context.Context, id int, fromStatus, toStatus, updatedBy string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE risk
+		 SET rejection_comment = NULL, rejection_stage = NULL, workflow_status = ?,
+		     updated_by = ?, updated_at = NOW()
+		 WHERE id = ? AND workflow_status = ?`,
+		toStatus, updatedBy, id, fromStatus,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("resubmit transition: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("resubmit transition rows: %w", err)
+	}
+	if n == 0 {
+		return &apierror.Error{StatusCode: http.StatusConflict, Body: "concurrent modification: workflow status changed"}
+	}
+	return nil
 }
 
 func (r *riskRepository) SetRiskType(ctx context.Context, id int, riskType, updatedBy string) error {
@@ -716,14 +759,6 @@ func (r *riskRepository) SetRiskType(ctx context.Context, id int, riskType, upda
 func (r *riskRepository) SetOwnerFirstApprovedAt(ctx context.Context, id int, updatedBy string) error {
 	_, err := r.db.ExecContext(ctx,
 		"UPDATE risk SET owner_first_approved_at = NOW(), updated_by = ?, updated_at = NOW() WHERE id = ? AND owner_first_approved_at IS NULL",
-		updatedBy, id,
-	)
-	return err
-}
-
-func (r *riskRepository) Cancel(ctx context.Context, id int, updatedBy string) error {
-	_, err := r.db.ExecContext(ctx,
-		"UPDATE risk SET workflow_status = 'CANCELLED', updated_by = ?, updated_at = NOW() WHERE id = ?",
 		updatedBy, id,
 	)
 	return err

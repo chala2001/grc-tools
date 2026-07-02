@@ -32,7 +32,7 @@ import (
 
 // RiskService defines the business operations for risk lifecycle management.
 type RiskService interface {
-	List(ctx context.Context, filter model.ListRisksFilter) ([]*model.RiskListItem, error)
+	List(ctx context.Context, filter model.ListRisksFilter) (*model.RiskListPage, error)
 	GetByID(ctx context.Context, id int) (*model.RiskDetail, error)
 	Create(ctx context.Context, req model.CreateRiskRequest, createdBy string) (*model.CreateRiskResponse, error)
 	NextSequenceID(ctx context.Context, sourceRegisterID int) (int, error)
@@ -58,7 +58,7 @@ func NewRiskService(repo repository.RiskRepository) RiskService {
 	return &riskService{repo: repo}
 }
 
-func (s *riskService) List(ctx context.Context, filter model.ListRisksFilter) ([]*model.RiskListItem, error) {
+func (s *riskService) List(ctx context.Context, filter model.ListRisksFilter) (*model.RiskListPage, error) {
 	return s.repo.List(ctx, filter)
 }
 
@@ -92,20 +92,20 @@ func (s *riskService) OwnerApprove(ctx context.Context, id int, byUserEmail stri
 	}
 
 	switch detail.WorkflowStatus {
-	case "PENDING_RISK_OWNER_APPROVAL", "PENDING_AMENDMENT":
+	case model.StatusPendingOwnerApproval, model.StatusPendingAmendment:
 		if detail.OwnerFirstApprovedAt == nil {
 			if err = s.repo.SetOwnerFirstApprovedAt(ctx, id, byUserEmail); err != nil {
 				return err
 			}
 		}
-		next := "PENDING_COMPLIANCE_REVIEW"
+		next := model.StatusPendingComplianceReview
 		if stringVal(detail.TreatmentStrategy) == "ACCEPT" && detail.GrossScore != nil && detail.GrossScore.RiskLevel == "HIGH" {
-			next = "PENDING_MANAGEMENT_APPROVAL"
+			next = model.StatusPendingManagementApproval
 		}
-		return s.repo.UpdateStatus(ctx, id, next, byUserEmail)
+		return s.repo.TransitionStatus(ctx, id, detail.WorkflowStatus, next, byUserEmail)
 
-	case "PENDING_OWNER_COMPLETION_APPROVAL":
-		return s.repo.UpdateStatus(ctx, id, "PENDING_COMPLIANCE_CLOSURE", byUserEmail)
+	case model.StatusPendingOwnerCompletion:
+		return s.repo.TransitionStatus(ctx, id, model.StatusPendingOwnerCompletion, model.StatusPendingComplianceClosure, byUserEmail)
 
 	default:
 		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be owner-approved from status: %s", detail.WorkflowStatus)}
@@ -118,10 +118,10 @@ func (s *riskService) ManagementApprove(ctx context.Context, id int, byUserEmail
 	if err != nil {
 		return err
 	}
-	if status != "PENDING_MANAGEMENT_APPROVAL" {
+	if status != model.StatusPendingManagementApproval {
 		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be management-approved from status: %s", status)}
 	}
-	return s.repo.UpdateStatus(ctx, id, "PENDING_COMPLIANCE_REVIEW", byUserEmail)
+	return s.repo.TransitionStatus(ctx, id, model.StatusPendingManagementApproval, model.StatusPendingComplianceReview, byUserEmail)
 }
 
 // Approve is the compliance approval step: PENDING_COMPLIANCE_REVIEW → IN_REMEDIATION.
@@ -130,10 +130,10 @@ func (s *riskService) Approve(ctx context.Context, id int, byUserEmail string) e
 	if err != nil {
 		return err
 	}
-	if status != "PENDING_COMPLIANCE_REVIEW" {
+	if status != model.StatusPendingComplianceReview {
 		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be approved from status: %s", status)}
 	}
-	return s.repo.UpdateStatus(ctx, id, "IN_REMEDIATION", byUserEmail)
+	return s.repo.TransitionStatus(ctx, id, model.StatusPendingComplianceReview, model.StatusInRemediation, byUserEmail)
 }
 
 // Reject routes rejections from any pending-approval stage back to PENDING_REVISION
@@ -147,28 +147,21 @@ func (s *riskService) Reject(ctx context.Context, id int, req model.RejectRiskRe
 		return err
 	}
 
-	var stage, nextStatus string
+	var stage string
 	switch status {
-	case "PENDING_RISK_OWNER_APPROVAL", "PENDING_AMENDMENT":
+	case model.StatusPendingOwnerApproval, model.StatusPendingAmendment:
 		stage = "OWNER"
-		nextStatus = "PENDING_REVISION"
-	case "PENDING_MANAGEMENT_APPROVAL":
+	case model.StatusPendingManagementApproval:
 		stage = "MANAGEMENT"
-		nextStatus = "PENDING_REVISION"
-	case "PENDING_COMPLIANCE_REVIEW":
+	case model.StatusPendingComplianceReview:
 		stage = "COMPLIANCE"
-		nextStatus = "PENDING_REVISION"
-	case "PENDING_OWNER_COMPLETION_APPROVAL":
+	case model.StatusPendingOwnerCompletion:
 		stage = "COMPLETION_OWNER"
-		nextStatus = "PENDING_REVISION"
 	default:
 		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be rejected from status: %s", status)}
 	}
 
-	if err = s.repo.SetRejection(ctx, id, req.RejectionComment, stage, byUserEmail); err != nil {
-		return err
-	}
-	return s.repo.UpdateStatus(ctx, id, nextStatus, byUserEmail)
+	return s.repo.RejectTransition(ctx, id, req.RejectionComment, stage, status, byUserEmail)
 }
 
 // Complete moves IN_REMEDIATION → PENDING_OWNER_COMPLETION_APPROVAL.
@@ -177,10 +170,10 @@ func (s *riskService) Complete(ctx context.Context, id int, byUserEmail string) 
 	if err != nil {
 		return err
 	}
-	if status != "IN_REMEDIATION" {
+	if status != model.StatusInRemediation {
 		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be completed from status: %s", status)}
 	}
-	return s.repo.UpdateStatus(ctx, id, "PENDING_OWNER_COMPLETION_APPROVAL", byUserEmail)
+	return s.repo.TransitionStatus(ctx, id, model.StatusInRemediation, model.StatusPendingOwnerCompletion, byUserEmail)
 }
 
 // Resubmit clears rejection info and moves PENDING_REVISION back to the appropriate approval stage:
@@ -191,17 +184,14 @@ func (s *riskService) Resubmit(ctx context.Context, id int, byUserEmail string) 
 	if err != nil {
 		return err
 	}
-	if detail.WorkflowStatus != "PENDING_REVISION" {
+	if detail.WorkflowStatus != model.StatusPendingRevision {
 		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be resubmitted from status: %s", detail.WorkflowStatus)}
 	}
-	next := "PENDING_RISK_OWNER_APPROVAL"
+	next := model.StatusPendingOwnerApproval
 	if stringVal(detail.RejectionStage) == "COMPLETION_OWNER" {
-		next = "PENDING_OWNER_COMPLETION_APPROVAL"
+		next = model.StatusPendingOwnerCompletion
 	}
-	if err = s.repo.ClearRejection(ctx, id, byUserEmail); err != nil {
-		return err
-	}
-	return s.repo.UpdateStatus(ctx, id, next, byUserEmail)
+	return s.repo.ResubmitTransition(ctx, id, model.StatusPendingRevision, next, byUserEmail)
 }
 
 // Close moves PENDING_COMPLIANCE_CLOSURE → CLOSED.
@@ -210,10 +200,10 @@ func (s *riskService) Close(ctx context.Context, id int, byUserEmail string) err
 	if err != nil {
 		return err
 	}
-	if status != "PENDING_COMPLIANCE_CLOSURE" {
+	if status != model.StatusPendingComplianceClosure {
 		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be closed from status: %s", status)}
 	}
-	return s.repo.UpdateStatus(ctx, id, "CLOSED", byUserEmail)
+	return s.repo.TransitionStatus(ctx, id, model.StatusPendingComplianceClosure, model.StatusClosed, byUserEmail)
 }
 
 // Cancel soft-deletes a risk by setting it to CANCELLED. Only valid from PENDING_RISK_OWNER_APPROVAL.
@@ -222,10 +212,10 @@ func (s *riskService) Cancel(ctx context.Context, id int, byUserEmail string) er
 	if err != nil {
 		return err
 	}
-	if status != "PENDING_RISK_OWNER_APPROVAL" {
+	if status != model.StatusPendingOwnerApproval {
 		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be cancelled from status: %s", status)}
 	}
-	return s.repo.Cancel(ctx, id, byUserEmail)
+	return s.repo.TransitionStatus(ctx, id, model.StatusPendingOwnerApproval, model.StatusCancelled, byUserEmail)
 }
 
 func stringVal(p *string) string {

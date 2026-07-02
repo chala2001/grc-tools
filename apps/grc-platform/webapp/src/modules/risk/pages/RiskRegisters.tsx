@@ -42,6 +42,7 @@ import {
   TableCell,
   TableContainer,
   TableHead,
+  TablePagination,
   TableRow,
   Tabs,
   TextField,
@@ -286,6 +287,9 @@ export default function RiskRegisters(): JSX.Element {
   const [activeTab, setActiveTab] = useState<TabKey>("approved");
   const [approvedFilter, setApprovedFilter] = useState<"" | "open" | "closed">("");
   const [risks, setRisks] = useState<RiskListItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState("");
 
@@ -338,27 +342,36 @@ export default function RiskRegisters(): JSX.Element {
     fetchComplianceReferences(authFetch).then(setComplianceRefs).catch(console.error);
   }, []);
 
+  // Reset to page 0 whenever the tab or filters change so the user never lands
+  // on a page that doesn't exist for the new result set.
+  useEffect(() => {
+    setPage(0);
+  }, [activeTab, filters]);
+
   const loadRisks = useCallback(async () => {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     setListError("");
     try {
-      const items = await fetchRisks(authFetch, {
+      const result = await fetchRisks(authFetch, {
         statuses: getStatuses(),
         team_id: filters.teamId || undefined,
         level: filters.level || undefined,
         search: filters.search || undefined,
         risk_type: filters.riskType || undefined,
+        offset: page * rowsPerPage,
+        limit: rowsPerPage,
       });
       if (seq !== loadSeqRef.current) return;
-      setRisks(items ?? []);
+      setRisks(result.items ?? []);
+      setTotal(result.total);
     } catch (e: unknown) {
       if (seq !== loadSeqRef.current) return;
       setListError(e instanceof Error ? e.message : "Failed to load risks.");
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [activeTab, filters, getStatuses]);
+  }, [activeTab, filters, getStatuses, page, rowsPerPage]);
 
   useEffect(() => {
     loadRisks();
@@ -458,10 +471,6 @@ export default function RiskRegisters(): JSX.Element {
     if (!editDetail) return;
     const savedId = editDetail.id;
     const isPendingRevision = editDetail.workflow_status === "PENDING_REVISION";
-    const isFullEdit =
-      editDetail.owner_first_approved_at === null &&
-      (editDetail.workflow_status === "PENDING_RISK_OWNER_APPROVAL" ||
-       editDetail.workflow_status === "PENDING_REVISION");
     await updateRisk(authFetch, savedId, payload);
     setEditDetail(null);
     loadRisks();
@@ -637,6 +646,18 @@ export default function RiskRegisters(): JSX.Element {
             </TableBody>
           </Table>
         </TableContainer>
+        <TablePagination
+          component="div"
+          count={total}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={[25, 50, 100]}
+          onPageChange={(_, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+        />
       </Paper>
 
       <RiskDetailDrawer

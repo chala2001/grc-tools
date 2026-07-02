@@ -21,19 +21,16 @@ import (
 
 	"github.com/wso2-open-operations/grc-platform/backend/internal/response"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/risk/model"
-	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/auth"
 )
 
 // handleAssessRisk serves POST /api/v1/risks/{id}/assess.
 // Records a residual risk assessment (likelihood, impact, progress, reassessment_date)
 // stored in the risk_assessment table. This is separate from "Submit for Approval".
 func (d *Deps) handleAssessRisk(w http.ResponseWriter, r *http.Request) {
-	user := auth.FromContext(r.Context())
-	if user == nil {
-		response.WriteError(w, http.StatusUnauthorized, response.ErrMsgUnauthorized)
+	by, ok := requireUserEmail(w, r)
+	if !ok {
 		return
 	}
-
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
@@ -44,7 +41,6 @@ func (d *Deps) handleAssessRisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	by := userEmail(r)
 	result, err := d.Assessment.Create(r.Context(), id, req, by)
 	if err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
