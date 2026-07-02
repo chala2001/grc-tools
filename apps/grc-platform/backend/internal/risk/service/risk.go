@@ -75,26 +75,10 @@ func (s *riskService) NextSequenceID(ctx context.Context, sourceRegisterID int) 
 }
 
 // Update saves risk field changes. If a restricted field changed while the risk is
-// IN_REMEDIATION, it marks risk_type = UPDATED and moves to PENDING_AMENDMENT so
-// it re-enters the full approval chain.
+// IN_REMEDIATION, the repository atomically marks risk_type = UPDATED and moves
+// the risk to PENDING_AMENDMENT in the same transaction.
 func (s *riskService) Update(ctx context.Context, id int, req model.UpdateRiskRequest, updatedBy string) error {
-	status, err := s.repo.GetWorkflowStatus(ctx, id)
-	if err != nil {
-		return err
-	}
-
-	restrictedChanged, err := s.repo.Update(ctx, id, req, updatedBy)
-	if err != nil {
-		return err
-	}
-
-	if restrictedChanged && status == "IN_REMEDIATION" {
-		if err = s.repo.SetRiskType(ctx, id, "UPDATED", updatedBy); err != nil {
-			return err
-		}
-		return s.repo.UpdateStatus(ctx, id, "PENDING_AMENDMENT", updatedBy)
-	}
-	return nil
+	return s.repo.Update(ctx, id, req, updatedBy)
 }
 
 // OwnerApprove handles three situations:
@@ -152,8 +136,8 @@ func (s *riskService) Approve(ctx context.Context, id int, byUserEmail string) e
 	return s.repo.UpdateStatus(ctx, id, "IN_REMEDIATION", byUserEmail)
 }
 
-// Reject routes all rejections back to PENDING_REVISION (or IN_REMEDIATION for
-// post-remediation owner rejection) and records where the rejection occurred.
+// Reject routes rejections from any pending-approval stage back to PENDING_REVISION
+// and records where the rejection occurred.
 func (s *riskService) Reject(ctx context.Context, id int, req model.RejectRiskRequest, byUserEmail string) error {
 	if req.RejectionComment == "" {
 		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "rejection_comment is required"}

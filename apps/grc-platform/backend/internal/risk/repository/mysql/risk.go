@@ -298,7 +298,7 @@ func (r *riskRepository) List(ctx context.Context, filter model.ListRisksFilter)
 	}
 	defer rows.Close()
 
-	var out []*model.RiskListItem
+	out := make([]*model.RiskListItem, 0)
 	for rows.Next() {
 		var item model.RiskListItem
 		var createdAt []byte
@@ -422,6 +422,9 @@ func (r *riskRepository) GetByID(ctx context.Context, id int) (*model.RiskDetail
 	apErr := r.db.QueryRowContext(ctx,
 		"SELECT id, action_owner_id, description, status, plan_type FROM risk_action_plan WHERE risk_id = ? AND plan_type = 'STANDARD' LIMIT 1", id,
 	).Scan(&ap.ID, &ap.ActionOwnerID, &ap.Description, &ap.Status, &ap.PlanType)
+	if apErr != nil && apErr != sql.ErrNoRows {
+		return nil, fmt.Errorf("fetch action plan: %w", apErr)
+	}
 	if apErr == nil {
 		stepRows, err := r.db.QueryContext(ctx,
 			"SELECT id, plan_id, step_no, description, status, completed_date FROM risk_action_step WHERE plan_id = ? ORDER BY step_no", ap.ID)
@@ -483,14 +486,22 @@ func (r *riskRepository) GetWorkflowStatus(ctx context.Context, id int) (string,
 	return status, nil
 }
 
-func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRiskRequest, updatedBy string) (bool, error) {
+func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRiskRequest, updatedBy string) error {
 	// Only implementation_date, email_subject, and action_steps require re-approval when changed on an IN_REMEDIATION risk.
-	var curImplDate, curEmailSubject sql.NullString
+	var curImplDate, curEmailSubject, curStatus sql.NullString
+	var ownerFirstApprovedAt sql.NullTime
 	err := r.db.QueryRowContext(ctx,
-		"SELECT implementation_date, email_subject FROM risk WHERE id = ?", id,
-	).Scan(&curImplDate, &curEmailSubject)
+		"SELECT implementation_date, email_subject, owner_first_approved_at, workflow_status FROM risk WHERE id = ?", id,
+	).Scan(&curImplDate, &curEmailSubject, &ownerFirstApprovedAt, &curStatus)
 	if err != nil {
-		return false, fmt.Errorf("fetch current risk for update: %w", err)
+		return fmt.Errorf("fetch current risk for update: %w", err)
+	}
+
+	// Gross score and reassessment date are full-edit-only: ignore them once a
+	// risk owner has approved the risk at least once.
+	if ownerFirstApprovedAt.Valid {
+		req.GrossScoreID = nil
+		req.ReassessmentDate = ""
 	}
 
 	restrictedChanged := false
@@ -506,13 +517,48 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 	}
 	checkAndLog("implementation_date", curImplDate.String, req.ImplementationDate)
 	checkAndLog("email_subject", curEmailSubject.String, req.EmailSubject)
+	stepsChanged := false
 	if len(req.ActionSteps) > 0 {
-		restrictedChanged = true
+		var planID int
+		planErr := r.db.QueryRowContext(ctx,
+			"SELECT id FROM risk_action_plan WHERE risk_id = ? AND plan_type = 'STANDARD' LIMIT 1", id,
+		).Scan(&planID)
+		if planErr != nil {
+			stepsChanged = true
+		} else {
+			stepRows, stepErr := r.db.QueryContext(ctx,
+				"SELECT description FROM risk_action_step WHERE plan_id = ? ORDER BY step_no", planID)
+			if stepErr != nil {
+				stepsChanged = true
+			} else {
+				var curDescs []string
+				for stepRows.Next() {
+					var desc string
+					if stepRows.Scan(&desc) == nil {
+						curDescs = append(curDescs, desc)
+					}
+				}
+				stepRows.Close()
+				if len(curDescs) != len(req.ActionSteps) {
+					stepsChanged = true
+				} else {
+					for i, step := range req.ActionSteps {
+						if curDescs[i] != step.Description {
+							stepsChanged = true
+							break
+						}
+					}
+				}
+			}
+		}
+		if stepsChanged {
+			restrictedChanged = true
+		}
 	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, fmt.Errorf("begin update tx: %w", err)
+		return fmt.Errorf("begin update tx: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
 
@@ -526,7 +572,7 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 			identified_by_name = COALESCE(?, identified_by_name),
 			assigner_id = COALESCE(?, assigner_id),
 			owner_id = COALESCE(?, owner_id),
-			impact_description = ?,
+			impact_description = COALESCE(NULLIF(?,''), impact_description),
 			progress = COALESCE(NULLIF(?,''), progress),
 			git_issue_url = COALESCE(NULLIF(?,''), git_issue_url),
 			email_subject = ?,
@@ -548,19 +594,19 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 		req.GrossScoreID,
 		updatedBy, id,
 	); err != nil {
-		return false, fmt.Errorf("update risk: %w", err)
+		return fmt.Errorf("update risk: %w", err)
 	}
 
 	// Update compliance references if provided.
 	if req.ComplianceReferenceIDs != nil {
 		if _, err = tx.ExecContext(ctx, "DELETE FROM risk_compliance_reference WHERE risk_id = ?", id); err != nil {
-			return false, fmt.Errorf("clear compliance refs: %w", err)
+			return fmt.Errorf("clear compliance refs: %w", err)
 		}
 		for _, refID := range req.ComplianceReferenceIDs {
 			if _, err = tx.ExecContext(ctx,
 				"INSERT INTO risk_compliance_reference (risk_id, reference_id) VALUES (?, ?)", id, refID,
 			); err != nil {
-				return false, fmt.Errorf("insert compliance ref %d: %w", refID, err)
+				return fmt.Errorf("insert compliance ref %d: %w", refID, err)
 			}
 		}
 	}
@@ -575,20 +621,20 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 			WHERE risk_id = ? AND plan_type = 'STANDARD'`,
 			req.ActionPlanDescription, req.ActionOwnerID, updatedBy, id,
 		); err != nil {
-			return false, fmt.Errorf("update action plan: %w", err)
+			return fmt.Errorf("update action plan: %w", err)
 		}
 	}
 
-	// Replace action steps if provided.
-	if len(req.ActionSteps) > 0 {
+	// Replace action steps only when content actually changed, to preserve step status and completed_date.
+	if stepsChanged {
 		var planID int
 		if err = tx.QueryRowContext(ctx,
 			"SELECT id FROM risk_action_plan WHERE risk_id = ? AND plan_type = 'STANDARD' LIMIT 1", id,
 		).Scan(&planID); err != nil {
-			return false, fmt.Errorf("find action plan for step update: %w", err)
+			return fmt.Errorf("find action plan for step update: %w", err)
 		}
 		if _, err = tx.ExecContext(ctx, "DELETE FROM risk_action_step WHERE plan_id = ?", planID); err != nil {
-			return false, fmt.Errorf("clear action steps: %w", err)
+			return fmt.Errorf("clear action steps: %w", err)
 		}
 		for i, step := range req.ActionSteps {
 			if _, err = tx.ExecContext(ctx, `
@@ -596,7 +642,7 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 				VALUES (?, ?, ?, 'PENDING', ?, ?)`,
 				planID, i+1, step.Description, updatedBy, updatedBy,
 			); err != nil {
-				return false, fmt.Errorf("insert updated step %d: %w", i+1, err)
+				return fmt.Errorf("insert updated step %d: %w", i+1, err)
 			}
 		}
 	}
@@ -609,19 +655,30 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 			changelogArgs[i], changelogArgs[i+1], changelogArgs[i+2],
 			changelogArgs[i+3], changelogArgs[i+4],
 		); err != nil {
-			return false, fmt.Errorf("insert changelog: %w", err)
+			return fmt.Errorf("insert changelog: %w", err)
 		}
 	}
-	if len(req.ActionSteps) > 0 {
+	if stepsChanged {
 		if _, err = tx.ExecContext(ctx,
 			"INSERT INTO risk_change_log (risk_id, created_by, action, field_changed) VALUES (?, ?, 'UPDATE', 'action_steps')",
 			id, updatedBy,
 		); err != nil {
-			return false, fmt.Errorf("insert action_steps changelog: %w", err)
+			return fmt.Errorf("insert action_steps changelog: %w", err)
 		}
 	}
 
-	return restrictedChanged, tx.Commit()
+	// If a restricted field changed on an IN_REMEDIATION risk, atomically mark it
+	// as UPDATED and move it to PENDING_AMENDMENT in the same transaction.
+	if restrictedChanged && curStatus.String == "IN_REMEDIATION" {
+		if _, err = tx.ExecContext(ctx,
+			"UPDATE risk SET risk_type = 'UPDATED', workflow_status = 'PENDING_AMENDMENT', updated_by = ?, updated_at = NOW() WHERE id = ?",
+			updatedBy, id,
+		); err != nil {
+			return fmt.Errorf("set amendment status: %w", err)
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (r *riskRepository) UpdateStatus(ctx context.Context, id int, status, updatedBy string) error {

@@ -37,10 +37,20 @@ export const STATUS_CONFIG: Record<string, StatusCfg> = {
   CLOSED:                         { label: "Closed",                       color: "default", sx: { bgcolor: "#388e3c", color: "#fff" } },
 };
 
+// Parses a date string as local time when it is a bare YYYY-MM-DD value.
+// new Date("YYYY-MM-DD") is UTC midnight and drifts one day in UTC− zones;
+// new Date(y, m-1, d) is always local midnight.
+function parseDateStr(s: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    return new Date(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
+  }
+  return new Date(s);
+}
+
 // Calculates the age in days from the risk_identified_date or created_at string.
 export function calcAge(dateStr: string | null | undefined): number {
   if (!dateStr) return 0;
-  const then = new Date(dateStr);
+  const then = parseDateStr(dateStr);
   const now = new Date();
   return Math.max(0, Math.floor((now.getTime() - then.getTime()) / 86_400_000));
 }
@@ -55,7 +65,7 @@ export interface DueInfo {
 // color thresholds: overdue → red, ≤7 days → orange, >7 days → green.
 export function calcDue(implementationDate: string | null | undefined): DueInfo {
   if (!implementationDate) return { label: "—", color: "text.secondary", daysLeft: 0 };
-  const due = new Date(implementationDate);
+  const due = parseDateStr(implementationDate);
   const now = new Date();
   due.setHours(0, 0, 0, 0);
   now.setHours(0, 0, 0, 0);
@@ -76,7 +86,7 @@ export function calcDue(implementationDate: string | null | undefined): DueInfo 
 // into a readable form: "30 Jun 2026".
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "—";
-  const d = new Date(dateStr);
+  const d = parseDateStr(dateStr);
   if (isNaN(d.getTime())) return dateStr;
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }

@@ -31,7 +31,7 @@ type RiskRepository interface {
 	// need to guard a workflow transition, avoiding GetByID's full join + related-entity queries.
 	GetWorkflowStatus(ctx context.Context, id int) (string, error)
 	Create(ctx context.Context, req model.CreateRiskRequest, createdBy string) (*model.CreateRiskResponse, error)
-	Update(ctx context.Context, id int, req model.UpdateRiskRequest, updatedBy string) (restrictedChanged bool, err error)
+	Update(ctx context.Context, id int, req model.UpdateRiskRequest, updatedBy string) error
 	UpdateStatus(ctx context.Context, id int, status, updatedBy string) error
 	SetRejection(ctx context.Context, id int, comment, stage, updatedBy string) error
 	ClearRejection(ctx context.Context, id int, updatedBy string) error

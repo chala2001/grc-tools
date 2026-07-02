@@ -38,8 +38,9 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import { Plus, Trash2 } from "@wso2/oxygen-ui-icons-react";
-import { toDateOnlyString } from "@utils/dateTime";
+import { parseDateOnly, toDateOnlyString } from "@utils/dateTime";
 import type { JSX } from "react";
+import type * as React from "react";
 import type {
   ComplianceReference,
   RiskDetail,
@@ -112,7 +113,7 @@ export default function EditRiskDialog({
   const [riskDescription, setRiskDescription] = useState(detail.risk_description);
   const [impactDescription, setImpactDescription] = useState(detail.impact_description ?? "");
   const [riskIdentifiedDate, setRiskIdentifiedDate] = useState<Date | null>(
-    detail.risk_identified_date ? new Date(detail.risk_identified_date) : null,
+    parseDateOnly(detail.risk_identified_date),
   );
   const [identifiedByType, setIdentifiedByType] = useState(detail.identified_by_type ?? "");
   const [identifiedByUserId, setIdentifiedByUserId] = useState<number | "">(
@@ -128,7 +129,7 @@ export default function EditRiskDialog({
     detail.gross_score?.id ?? null,
   );
   const [reassessmentDate, setReassessmentDate] = useState<Date | null>(
-    detail.reassessment_date ? new Date(detail.reassessment_date) : null,
+    parseDateOnly(detail.reassessment_date),
   );
   const [treatmentStrategy, setTreatmentStrategy] = useState(detail.treatment_strategy ?? "");
   const [assignmentTeamId, setAssignmentTeamId] = useState<number>(detail.assignment_team_id);
@@ -144,7 +145,7 @@ export default function EditRiskDialog({
 
   // ── Fields available in both modes ────────────────────────────────────────
   const [implementationDate, setImplementationDate] = useState<Date | null>(
-    detail.implementation_date ? new Date(detail.implementation_date) : null,
+    parseDateOnly(detail.implementation_date),
   );
   const [actionSteps, setActionSteps] = useState<string[]>(
     detail.action_plan?.steps.map((s) => s.description) ?? [],
@@ -160,7 +161,7 @@ export default function EditRiskDialog({
     setRiskTitle(detail.risk_title);
     setRiskDescription(detail.risk_description);
     setImpactDescription(detail.impact_description ?? "");
-    setRiskIdentifiedDate(detail.risk_identified_date ? new Date(detail.risk_identified_date) : null);
+    setRiskIdentifiedDate(parseDateOnly(detail.risk_identified_date));
     setIdentifiedByType(detail.identified_by_type ?? "");
     setIdentifiedByUserId(detail.identified_by_user_id ?? "");
     setIdentifiedByName(detail.identified_by_name ?? "");
@@ -168,7 +169,7 @@ export default function EditRiskDialog({
     setOwnerId(detail.owner_id || "");
     setSelectedRefIds(detail.compliance_references.map((r) => r.id));
     setGrossScoreId(detail.gross_score?.id ?? null);
-    setReassessmentDate(detail.reassessment_date ? new Date(detail.reassessment_date) : null);
+    setReassessmentDate(parseDateOnly(detail.reassessment_date));
     setTreatmentStrategy(detail.treatment_strategy ?? "");
     setAssignmentTeamId(detail.assignment_team_id);
     setActionOwnerId(detail.action_plan?.action_owner_id ?? "");
@@ -176,7 +177,7 @@ export default function EditRiskDialog({
     setProgress(detail.progress ?? "");
     setGitIssueUrl(detail.git_issue_url ?? "");
     setRemarks(detail.remarks ?? "");
-    setImplementationDate(detail.implementation_date ? new Date(detail.implementation_date) : null);
+    setImplementationDate(parseDateOnly(detail.implementation_date));
     setActionSteps(detail.action_plan?.steps.map((s) => s.description) ?? []);
     setEmailSubject(detail.email_subject ?? "");
     setErrors({});
@@ -188,6 +189,12 @@ export default function EditRiskDialog({
     if (mode === "full") {
       if (!riskTitle.trim()) e.riskTitle = "Risk title is required.";
       if (!riskDescription.trim()) e.riskDescription = "Risk description is required.";
+      if (identifiedByType === "EMPLOYEE" && !identifiedByUserId) {
+        e.identifiedByUserId = "Please select the employee who identified this risk.";
+      }
+      if ((identifiedByType === "EXTERNAL_PERSON" || identifiedByType === "TOOL") && !identifiedByName.trim()) {
+        e.identifiedByName = "Please enter the name of who identified this risk.";
+      }
     }
     if (!emailSubject.trim()) e.emailSubject = "Email subject is required.";
     actionSteps.forEach((s, i) => {
@@ -429,7 +436,7 @@ export default function EditRiskDialog({
                     </Select>
                   </FormControl>
                   {identifiedByType === "EMPLOYEE" && (
-                    <FormControl fullWidth disabled={submitting}>
+                    <FormControl fullWidth disabled={submitting} error={!!errors.identifiedByUserId}>
                       <InputLabel>Identified By (Employee)</InputLabel>
                       <Select
                         label="Identified By (Employee)"
@@ -438,6 +445,7 @@ export default function EditRiskDialog({
                       >
                         {users.map((u) => <MenuItem key={u.id} value={u.id}>{u.display_name}</MenuItem>)}
                       </Select>
+                      {errors.identifiedByUserId && <Typography variant="caption" color="error">{errors.identifiedByUserId}</Typography>}
                     </FormControl>
                   )}
                   {(identifiedByType === "EXTERNAL_PERSON" || identifiedByType === "TOOL") && (
@@ -447,6 +455,8 @@ export default function EditRiskDialog({
                       value={identifiedByName}
                       onChange={(e) => setIdentifiedByName(e.target.value)}
                       disabled={submitting}
+                      error={!!errors.identifiedByName}
+                      helperText={errors.identifiedByName}
                     />
                   )}
                   <FormControl fullWidth disabled={submitting}>

@@ -181,6 +181,22 @@ export function formatBackendTimestampForDisplay(
 }
 
 /**
+ * Parses a "YYYY-MM-DD" backend date string as a local-time Date.
+ * Using new Date("YYYY-MM-DD") would give UTC midnight, which shifts the day
+ * in any UTC− timezone when local date parts are later read back.
+ *
+ * @param s - Date-only string from the API.
+ * @returns {Date | null} Local-midnight Date, or null when s is falsy/invalid.
+ */
+export function parseDateOnly(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const [y, m, d] = s.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const date = new Date(y, m - 1, d);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
  * Formats a local Date as a "YYYY-MM-DD" string for API payloads.
  *
  * @param d - Date to format, or null/undefined.

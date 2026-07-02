@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -50,6 +50,7 @@ import {
 } from "@wso2/oxygen-ui";
 import { Eye, RefreshCw, Search, X } from "@wso2/oxygen-ui-icons-react";
 import type { JSX } from "react";
+import type * as React from "react";
 import {
   approveRisk,
   cancelRisk,
@@ -200,7 +201,7 @@ function FilterBar({
           ),
           endAdornment: filters.search ? (
             <InputAdornment position="end">
-              <IconButton size="small" onClick={() => onChange({ ...filters, search: "" })}>
+              <IconButton size="small" aria-label="Clear search" onClick={() => onChange({ ...filters, search: "" })}>
                 <X size={14} />
               </IconButton>
             </InputAdornment>
@@ -269,7 +270,7 @@ function FilterBar({
       )}
 
       <Tooltip title="Refresh">
-        <IconButton size="small" onClick={onRefresh}>
+        <IconButton size="small" aria-label="Refresh list" onClick={onRefresh}>
           <RefreshCw size={16} />
         </IconButton>
       </Tooltip>
@@ -314,6 +315,9 @@ export default function RiskRegisters(): JSX.Element {
 
   const [actionError, setActionError] = useState("");
   const [actionSuccess, setActionSuccess] = useState("");
+  const [actionInFlight, setActionInFlight] = useState(false);
+
+  const loadSeqRef = useRef(0);
 
   const activeTabDef = TABS.find((t) => t.key === activeTab)!;
 
@@ -335,6 +339,7 @@ export default function RiskRegisters(): JSX.Element {
   }, []);
 
   const loadRisks = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setListError("");
     try {
@@ -345,11 +350,13 @@ export default function RiskRegisters(): JSX.Element {
         search: filters.search || undefined,
         risk_type: filters.riskType || undefined,
       });
+      if (seq !== loadSeqRef.current) return;
       setRisks(items ?? []);
     } catch (e: unknown) {
+      if (seq !== loadSeqRef.current) return;
       setListError(e instanceof Error ? e.message : "Failed to load risks.");
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [activeTab, filters, getStatuses]);
 
@@ -379,6 +386,8 @@ export default function RiskRegisters(): JSX.Element {
   };
 
   const runAction = async (fn: () => Promise<void>, successMsg: string) => {
+    if (actionInFlight) return;
+    setActionInFlight(true);
     setActionError("");
     setActionSuccess("");
     try {
@@ -388,6 +397,8 @@ export default function RiskRegisters(): JSX.Element {
       loadRisks();
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : "Action failed.");
+    } finally {
+      setActionInFlight(false);
     }
   };
 
@@ -615,7 +626,7 @@ export default function RiskRegisters(): JSX.Element {
                     </TableCell>
                     <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                       <Tooltip title="View Details">
-                        <IconButton size="small" onClick={() => openDrawer(risk.id)}>
+                        <IconButton size="small" aria-label={`View details for ${risk.risk_code}`} onClick={() => openDrawer(risk.id)}>
                           <Eye size={16} />
                         </IconButton>
                       </Tooltip>
@@ -633,6 +644,7 @@ export default function RiskRegisters(): JSX.Element {
         detail={drawerDetail}
         loading={drawerLoading}
         error={drawerError}
+        actionsDisabled={actionInFlight}
         onClose={closeDrawer}
         {...drawerActions}
       />
@@ -689,6 +701,7 @@ export default function RiskRegisters(): JSX.Element {
           <Button
             color="error"
             variant="contained"
+            disabled={actionInFlight}
             onClick={() => {
               setCancelConfirmOpen(false);
               runAction(

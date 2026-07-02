@@ -235,7 +235,7 @@ type UpdateRiskRequest struct {
 
 // UpdateActionStepRequest is one step inside UpdateRiskRequest.ActionSteps.
 type UpdateActionStepRequest struct {
-	ID          *int   `json:"id,omitempty"` // nil = new step; non-nil = update existing
+	ID          *int   `json:"id,omitempty"`
 	Description string `json:"description"`
 }
 

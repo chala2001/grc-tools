@@ -165,7 +165,7 @@ export default function AddRisk(): JSX.Element {
   const watchedSourceRegister  = methods.watch("sourceRegister");
 
   useEffect(() => {
-    document.getElementById("main-scroll-container")?.scrollTo({ top: 0, behavior: "smooth" });
+    document.getElementById("main-scroll-container")?.scrollTo({ top: 0 });
   }, [activeStep]);
 
   // Fetch all static dropdown data once the user is ready (real auth or mock mode).

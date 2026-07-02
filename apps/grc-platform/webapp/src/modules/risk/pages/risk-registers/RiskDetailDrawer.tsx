@@ -28,6 +28,7 @@ import {
 } from "@wso2/oxygen-ui";
 import { X } from "@wso2/oxygen-ui-icons-react";
 import type { JSX } from "react";
+import type * as React from "react";
 import type { RiskDetail } from "../../api/riskApi";
 import { STATUS_CONFIG, calcAge, calcDue, formatDate } from "./utils";
 
@@ -49,6 +50,7 @@ interface RiskDetailDrawerProps extends DrawerActions {
   detail: RiskDetail | null;
   loading: boolean;
   error: string;
+  actionsDisabled: boolean;
   onClose: () => void;
 }
 
@@ -86,16 +88,18 @@ function SectionTitle({ children }: { children: React.ReactNode }): JSX.Element 
 function ActionFooter({
   status,
   actions,
+  disabled,
 }: {
   status: string;
   actions: DrawerActions;
+  disabled: boolean;
 }): JSX.Element | null {
   const rejectAndApprove = (approveLabel: string, onApprove: () => void) => (
     <Box sx={{ display: "flex", gap: 1, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
-      <Button variant="outlined" color="error" fullWidth onClick={actions.onReject}>
+      <Button variant="outlined" color="error" fullWidth disabled={disabled} onClick={actions.onReject}>
         Reject
       </Button>
-      <Button variant="contained" color="success" fullWidth onClick={onApprove}>
+      <Button variant="contained" color="success" fullWidth disabled={disabled} onClick={onApprove}>
         {approveLabel}
       </Button>
     </Box>
@@ -106,18 +110,18 @@ function ActionFooter({
       return (
         <Box sx={{ pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
           <Stack direction="row" gap={1} sx={{ mb: 1 }}>
-            <Button variant="outlined" fullWidth onClick={actions.onEdit}>
+            <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onEdit}>
               Edit Risk
             </Button>
-            <Button variant="outlined" color="error" fullWidth onClick={actions.onCancel}>
+            <Button variant="outlined" color="error" fullWidth disabled={disabled} onClick={actions.onCancel}>
               Cancel Risk
             </Button>
           </Stack>
           <Box sx={{ display: "flex", gap: 1 }}>
-            <Button variant="outlined" color="error" fullWidth onClick={actions.onReject}>
+            <Button variant="outlined" color="error" fullWidth disabled={disabled} onClick={actions.onReject}>
               Reject
             </Button>
-            <Button variant="contained" color="success" fullWidth onClick={actions.onOwnerApprove}>
+            <Button variant="contained" color="success" fullWidth disabled={disabled} onClick={actions.onOwnerApprove}>
               Approve as Risk Owner
             </Button>
           </Box>
@@ -140,14 +144,14 @@ function ActionFooter({
       return (
         <Box sx={{ pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
           <Stack direction="row" gap={1} sx={{ mb: 1 }}>
-            <Button variant="outlined" fullWidth onClick={actions.onEdit}>
+            <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onEdit}>
               Edit Risk
             </Button>
-            <Button variant="outlined" fullWidth onClick={actions.onAssess}>
+            <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onAssess}>
               Assess Risk
             </Button>
           </Stack>
-          <Button variant="contained" fullWidth onClick={actions.onComplete}>
+          <Button variant="contained" fullWidth disabled={disabled} onClick={actions.onComplete}>
             Submit for Approval
           </Button>
         </Box>
@@ -157,10 +161,10 @@ function ActionFooter({
       return (
         <Box sx={{ pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
           <Stack direction="row" gap={1}>
-            <Button variant="outlined" fullWidth onClick={actions.onEdit}>
+            <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onEdit}>
               Edit Risk
             </Button>
-            <Button variant="contained" color="primary" fullWidth onClick={actions.onResubmit}>
+            <Button variant="contained" color="primary" fullWidth disabled={disabled} onClick={actions.onResubmit}>
               Resubmit
             </Button>
           </Stack>
@@ -170,7 +174,7 @@ function ActionFooter({
     case "PENDING_COMPLIANCE_CLOSURE":
       return (
         <Box sx={{ pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
-          <Button variant="contained" fullWidth onClick={actions.onCloseRisk}>
+          <Button variant="contained" fullWidth disabled={disabled} onClick={actions.onCloseRisk}>
             Close Risk
           </Button>
         </Box>
@@ -186,6 +190,7 @@ export default function RiskDetailDrawer({
   detail,
   loading,
   error,
+  actionsDisabled,
   onClose,
   ...actions
 }: RiskDetailDrawerProps): JSX.Element {
@@ -254,7 +259,7 @@ export default function RiskDetailDrawer({
               </Typography>
             )}
           </Box>
-          <IconButton onClick={onClose} size="small" sx={{ ml: 1, mt: -0.5, flexShrink: 0 }}>
+          <IconButton onClick={onClose} size="small" aria-label="Close risk details" sx={{ ml: 1, mt: -0.5, flexShrink: 0 }}>
             <X size={18} />
           </IconButton>
         </Box>
@@ -424,7 +429,7 @@ export default function RiskDetailDrawer({
       {/* Fixed action footer */}
       {detail && !loading && !error && (
         <Box sx={{ px: 3, pb: 3, pt: 0 }}>
-          <ActionFooter status={status} actions={actions} />
+          <ActionFooter status={status} actions={actions} disabled={actionsDisabled} />
         </Box>
       )}
     </Drawer>

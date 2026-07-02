@@ -19,6 +19,7 @@ package service
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/wso2-open-operations/grc-platform/backend/internal/apierror"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/risk/model"
@@ -51,6 +52,9 @@ func (s *riskAssessmentService) Create(ctx context.Context, riskID int, req mode
 	}
 	if req.ReassessmentDate == "" {
 		return nil, &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "reassessment_date is required"}
+	}
+	if _, err := time.Parse("2006-01-02", req.ReassessmentDate); err != nil {
+		return nil, &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "reassessment_date must be in YYYY-MM-DD format"}
 	}
 	return s.repo.Create(ctx, riskID, req, assessedBy)
 }

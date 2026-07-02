@@ -128,6 +128,10 @@ func (d *Deps) handleUpdateRisk(w http.ResponseWriter, r *http.Request) {
 		response.WriteError(w, http.StatusBadRequest, "risk_description is required")
 		return
 	}
+	if req.EmailSubject == "" {
+		response.WriteError(w, http.StatusBadRequest, "email_subject is required")
+		return
+	}
 
 	by := userEmail(r)
 	if err := d.Risk.Update(r.Context(), id, req, by); err != nil {

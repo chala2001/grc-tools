@@ -113,6 +113,8 @@ export default function RiskScoreGrid({
                     key={`${row.value}-${col.value}`}
                     component="button"
                     type="button"
+                    aria-label={`Likelihood ${row.label}, Impact ${col.label}${entry ? `, rating ${entry.risk_rating} (${entry.risk_level})` : ""}`}
+                    aria-pressed={isSelected}
                     onClick={() => onChange(row.value, col.value)}
                     sx={{
                       height: 48,
@@ -123,12 +125,13 @@ export default function RiskScoreGrid({
                       fontSize: "1rem",
                       cursor: "pointer",
                       border: "none",
-                      outline: isSelected ? "3px solid rgba(0,0,0,0.5)" : "2px solid transparent",
+                      outline: "none",
                       boxShadow: isSelected
                         ? `inset 0 0 0 3px #fff, 0 2px 10px ${entry?.color_code ?? "#aaa"}88`
                         : "none",
                       transition: "filter 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease",
                       "&:hover": { filter: "brightness(0.85)", transform: "scale(1.04)" },
+                      "&:focus-visible": { outline: "3px solid rgba(0,0,0,0.6)", outlineOffset: 2 },
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
