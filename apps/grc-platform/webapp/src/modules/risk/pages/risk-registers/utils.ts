@@ -62,7 +62,7 @@ export interface DueInfo {
 }
 
 // Returns due/overdue label and color based on implementation_date.
-// color thresholds: overdue → red, ≤7 days → orange, >7 days → green.
+// color thresholds: overdue = red, <=7 days = orange, >7 days = green.
 export function calcDue(implementationDate: string | null | undefined): DueInfo {
   if (!implementationDate) return { label: "—", color: "text.secondary", daysLeft: 0 };
   const due = parseDateStr(implementationDate);
