@@ -24,6 +24,7 @@ import (
 	"github.com/wso2-open-operations/grc-platform/backend/internal/response"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/risk/model"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/auth"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/privilege"
 )
 
 // handleNextSequenceID serves GET /api/v1/risks/next-sequence-id.
@@ -70,6 +71,9 @@ func (d *Deps) handleCreateRisk(w http.ResponseWriter, r *http.Request) {
 	user := auth.FromContext(r.Context())
 	if user == nil {
 		response.WriteError(w, http.StatusUnauthorized, response.ErrMsgUnauthorized)
+		return
+	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.CreateRisk) {
 		return
 	}
 

@@ -24,6 +24,7 @@ import (
 	"github.com/wso2-open-operations/grc-platform/backend/internal/response"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/risk/model"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/auth"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/privilege"
 )
 
 // requireUserEmail extracts the caller's email and writes a 401 when the
@@ -59,6 +60,9 @@ func parseRiskID(w http.ResponseWriter, r *http.Request) (int, bool) {
 //   - search:     matched against risk_code and risk_title
 //   - risk_type:  NEW | UPDATED (empty = all)
 func (d *Deps) handleListRisks(w http.ResponseWriter, r *http.Request) {
+	if !auth.RequirePrivilege(r.Context(), w, privilege.ViewRisks) {
+		return
+	}
 	q := r.URL.Query()
 
 	var filter model.ListRisksFilter
@@ -100,6 +104,9 @@ func (d *Deps) handleListRisks(w http.ResponseWriter, r *http.Request) {
 
 // handleGetRisk serves GET /api/v1/risks/{id}.
 func (d *Deps) handleGetRisk(w http.ResponseWriter, r *http.Request) {
+	if !auth.RequirePrivilege(r.Context(), w, privilege.ViewRisks) {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
@@ -121,7 +128,9 @@ func (d *Deps) handleUpdateRisk(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-
+	if !auth.RequirePrivilege(r.Context(), w, privilege.UpdateRisk) {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
@@ -159,6 +168,9 @@ func (d *Deps) handleOwnerApproveRisk(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.OwnerApproveRisk) {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
@@ -175,6 +187,9 @@ func (d *Deps) handleOwnerApproveRisk(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) handleManagementApproveRisk(w http.ResponseWriter, r *http.Request) {
 	by, ok := requireUserEmail(w, r)
 	if !ok {
+		return
+	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.ManagementApproveRisk) {
 		return
 	}
 	id, ok := parseRiskID(w, r)
@@ -195,6 +210,9 @@ func (d *Deps) handleApproveRisk(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.ComplianceApproveRisk) {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
@@ -206,8 +224,22 @@ func (d *Deps) handleApproveRisk(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// rejectPrivilegeFor maps a workflow status to the privilege required to reject
+// at that stage. Defaults to OwnerRejectRisk for all owner-stage states.
+func rejectPrivilegeFor(status string) string {
+	switch status {
+	case "PENDING_MANAGEMENT_APPROVAL":
+		return privilege.ManagementRejectRisk
+	case "PENDING_COMPLIANCE_REVIEW":
+		return privilege.ComplianceRejectRisk
+	default: // PENDING_RISK_OWNER_APPROVAL, PENDING_AMENDMENT, PENDING_OWNER_COMPLETION_APPROVAL
+		return privilege.OwnerRejectRisk
+	}
+}
+
 // handleRejectRisk serves POST /api/v1/risks/{id}/reject.
 // Routes to PENDING_REVISION from any pending-approval stage; stores rejection_stage.
+// The required privilege depends on which stage the risk is currently at.
 func (d *Deps) handleRejectRisk(w http.ResponseWriter, r *http.Request) {
 	by, ok := requireUserEmail(w, r)
 	if !ok {
@@ -215,6 +247,15 @@ func (d *Deps) handleRejectRisk(w http.ResponseWriter, r *http.Request) {
 	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
+		return
+	}
+
+	detail, err := d.Risk.GetByID(r.Context(), id)
+	if err != nil {
+		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
+		return
+	}
+	if !auth.RequirePrivilege(r.Context(), w, rejectPrivilegeFor(detail.WorkflowStatus)) {
 		return
 	}
 
@@ -237,6 +278,9 @@ func (d *Deps) handleCompleteRisk(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.CompleteRisk) {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
@@ -253,6 +297,9 @@ func (d *Deps) handleCompleteRisk(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) handleResubmitRisk(w http.ResponseWriter, r *http.Request) {
 	by, ok := requireUserEmail(w, r)
 	if !ok {
+		return
+	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.SubmitRisk) {
 		return
 	}
 	id, ok := parseRiskID(w, r)
@@ -273,6 +320,9 @@ func (d *Deps) handleCancelRisk(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.CancelRisk) {
+		return
+	}
 	id, ok := parseRiskID(w, r)
 	if !ok {
 		return
@@ -289,6 +339,9 @@ func (d *Deps) handleCancelRisk(w http.ResponseWriter, r *http.Request) {
 func (d *Deps) handleCloseRisk(w http.ResponseWriter, r *http.Request) {
 	by, ok := requireUserEmail(w, r)
 	if !ok {
+		return
+	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.CloseRisk) {
 		return
 	}
 	id, ok := parseRiskID(w, r)

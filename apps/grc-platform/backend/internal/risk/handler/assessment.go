@@ -21,6 +21,8 @@ import (
 
 	"github.com/wso2-open-operations/grc-platform/backend/internal/response"
 	"github.com/wso2-open-operations/grc-platform/backend/internal/risk/model"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/auth"
+	"github.com/wso2-open-operations/grc-platform/backend/internal/shared/privilege"
 )
 
 // handleAssessRisk serves POST /api/v1/risks/{id}/assess.
@@ -29,6 +31,9 @@ import (
 func (d *Deps) handleAssessRisk(w http.ResponseWriter, r *http.Request) {
 	by, ok := requireUserEmail(w, r)
 	if !ok {
+		return
+	}
+	if !auth.RequirePrivilege(r.Context(), w, privilege.AssessRisk) {
 		return
 	}
 	id, ok := parseRiskID(w, r)

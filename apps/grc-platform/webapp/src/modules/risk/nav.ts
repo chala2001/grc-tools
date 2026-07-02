@@ -29,24 +29,28 @@ export const riskNav: NavSection = {
       label: "Dashboard",
       path: "/risk/dashboard",
       icon: LayoutDashboard,
+      requiredPrivilege: "VIEW_RISKS",
     },
     {
       id: "risk-registers",
       label: "Risk Registers",
       path: "/risk/registers",
       icon: ClipboardList,
+      requiredPrivilege: "VIEW_RISKS",
     },
     {
       id: "risk-add",
       label: "Add Risk",
       path: "/risk/add",
       icon: PlusCircle,
+      requiredPrivilege: "CREATE_RISK",
     },
     {
       id: "risk-analytics",
       label: "Analytics",
       path: "/risk/analytics",
       icon: BarChart2,
+      requiredPrivilege: "VIEW_ANALYTICS",
     },
   ],
 };

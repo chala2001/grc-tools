@@ -81,6 +81,7 @@ import type {
   UserOption,
 } from "../api/riskApi";
 import { useAuthApiClient } from "@hooks/useAuthApiClient";
+import { useRiskPrivileges } from "../hooks/useRiskPrivileges";
 import RiskDetailDrawer from "./risk-registers/RiskDetailDrawer";
 import RejectDialog from "./risk-registers/RejectDialog";
 import ReassessmentDialog from "./risk-registers/ReassessmentDialog";
@@ -283,6 +284,7 @@ function FilterBar({
 
 export default function RiskRegisters(): JSX.Element {
   const authFetch = useAuthApiClient();
+  const { can } = useRiskPrivileges();
 
   const [activeTab, setActiveTab] = useState<TabKey>("approved");
   const [approvedFilter, setApprovedFilter] = useState<"" | "open" | "closed">("");
@@ -666,6 +668,7 @@ export default function RiskRegisters(): JSX.Element {
         loading={drawerLoading}
         error={drawerError}
         actionsDisabled={actionInFlight}
+        can={can}
         onClose={closeDrawer}
         {...drawerActions}
       />

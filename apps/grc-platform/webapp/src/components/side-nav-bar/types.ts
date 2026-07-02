@@ -22,6 +22,7 @@ export interface NavItem {
   label: string;
   path: string;
   icon: ComponentType<{ size?: number }>;
+  requiredPrivilege?: string; // when set, item is hidden until the user holds this privilege
 }
 
 // A collapsible module section in the sidebar (e.g. Audit Hub).

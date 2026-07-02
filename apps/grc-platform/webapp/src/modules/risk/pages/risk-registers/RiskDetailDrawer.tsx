@@ -30,6 +30,7 @@ import { X } from "@wso2/oxygen-ui-icons-react";
 import type { JSX } from "react";
 import type * as React from "react";
 import type { RiskDetail } from "../../api/riskApi";
+import { RiskPrivilege } from "../../privileges";
 import { STATUS_CONFIG, calcAge, calcDue, formatDate } from "./utils";
 
 export interface DrawerActions {
@@ -51,6 +52,7 @@ interface RiskDetailDrawerProps extends DrawerActions {
   loading: boolean;
   error: string;
   actionsDisabled: boolean;
+  can: (privilege: string) => boolean;
   onClose: () => void;
 }
 
@@ -89,89 +91,140 @@ function ActionFooter({
   status,
   actions,
   disabled,
+  can,
 }: {
   status: string;
   actions: DrawerActions;
   disabled: boolean;
+  can: (privilege: string) => boolean;
 }): JSX.Element | null {
-  const rejectAndApprove = (approveLabel: string, onApprove: () => void) => (
-    <Box sx={{ display: "flex", gap: 1, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
-      <Button variant="outlined" color="error" fullWidth disabled={disabled} onClick={actions.onReject}>
-        Reject
-      </Button>
-      <Button variant="contained" color="success" fullWidth disabled={disabled} onClick={onApprove}>
-        {approveLabel}
-      </Button>
-    </Box>
-  );
+  const rejectAndApprove = (approveLabel: string, onApprove: () => void, approvePriv: string, rejectPriv: string) => {
+    const showReject = can(rejectPriv);
+    const showApprove = can(approvePriv);
+    if (!showReject && !showApprove) return null;
+    return (
+      <Box sx={{ display: "flex", gap: 1, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
+        {showReject && (
+          <Button variant="outlined" color="error" fullWidth disabled={disabled} onClick={actions.onReject}>
+            Reject
+          </Button>
+        )}
+        {showApprove && (
+          <Button variant="contained" color="success" fullWidth disabled={disabled} onClick={onApprove}>
+            {approveLabel}
+          </Button>
+        )}
+      </Box>
+    );
+  };
 
   switch (status) {
-    case "PENDING_RISK_OWNER_APPROVAL":
+    case "PENDING_RISK_OWNER_APPROVAL": {
+      const showEdit = can(RiskPrivilege.UpdateRisk);
+      const showCancel = can(RiskPrivilege.CancelRisk);
+      const showReject = can(RiskPrivilege.OwnerRejectRisk);
+      const showOwnerApprove = can(RiskPrivilege.OwnerApproveRisk);
+      if (!showEdit && !showCancel && !showReject && !showOwnerApprove) return null;
       return (
         <Box sx={{ pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
-          <Stack direction="row" gap={1} sx={{ mb: 1 }}>
-            <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onEdit}>
-              Edit Risk
-            </Button>
-            <Button variant="outlined" color="error" fullWidth disabled={disabled} onClick={actions.onCancel}>
-              Cancel Risk
-            </Button>
-          </Stack>
-          <Box sx={{ display: "flex", gap: 1 }}>
-            <Button variant="outlined" color="error" fullWidth disabled={disabled} onClick={actions.onReject}>
-              Reject
-            </Button>
-            <Button variant="contained" color="success" fullWidth disabled={disabled} onClick={actions.onOwnerApprove}>
-              Approve as Risk Owner
-            </Button>
-          </Box>
+          {(showEdit || showCancel) && (
+            <Stack direction="row" gap={1} sx={{ mb: 1 }}>
+              {showEdit && (
+                <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onEdit}>
+                  Edit Risk
+                </Button>
+              )}
+              {showCancel && (
+                <Button variant="outlined" color="error" fullWidth disabled={disabled} onClick={actions.onCancel}>
+                  Cancel Risk
+                </Button>
+              )}
+            </Stack>
+          )}
+          {(showReject || showOwnerApprove) && (
+            <Box sx={{ display: "flex", gap: 1 }}>
+              {showReject && (
+                <Button variant="outlined" color="error" fullWidth disabled={disabled} onClick={actions.onReject}>
+                  Reject
+                </Button>
+              )}
+              {showOwnerApprove && (
+                <Button variant="contained" color="success" fullWidth disabled={disabled} onClick={actions.onOwnerApprove}>
+                  Approve as Risk Owner
+                </Button>
+              )}
+            </Box>
+          )}
         </Box>
       );
+    }
 
     case "PENDING_AMENDMENT":
-      return rejectAndApprove("Approve as Risk Owner", actions.onOwnerApprove);
+      return rejectAndApprove("Approve as Risk Owner", actions.onOwnerApprove, RiskPrivilege.OwnerApproveRisk, RiskPrivilege.OwnerRejectRisk);
 
     case "PENDING_MANAGEMENT_APPROVAL":
-      return rejectAndApprove("Approve as Management", actions.onManagementApprove);
+      return rejectAndApprove("Approve as Management", actions.onManagementApprove, RiskPrivilege.ManagementApproveRisk, RiskPrivilege.ManagementRejectRisk);
 
     case "PENDING_COMPLIANCE_REVIEW":
-      return rejectAndApprove("Approve (Compliance)", actions.onApprove);
+      return rejectAndApprove("Approve (Compliance)", actions.onApprove, RiskPrivilege.ComplianceApproveRisk, RiskPrivilege.ComplianceRejectRisk);
 
     case "PENDING_OWNER_COMPLETION_APPROVAL":
-      return rejectAndApprove("Approve Completion", actions.onOwnerApprove);
+      return rejectAndApprove("Approve Completion", actions.onOwnerApprove, RiskPrivilege.OwnerApproveRisk, RiskPrivilege.OwnerRejectRisk);
 
-    case "IN_REMEDIATION":
+    case "IN_REMEDIATION": {
+      const showEdit = can(RiskPrivilege.UpdateRisk);
+      const showAssess = can(RiskPrivilege.AssessRisk);
+      const showComplete = can(RiskPrivilege.CompleteRisk);
+      if (!showEdit && !showAssess && !showComplete) return null;
       return (
         <Box sx={{ pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
-          <Stack direction="row" gap={1} sx={{ mb: 1 }}>
-            <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onEdit}>
-              Edit Risk
+          {(showEdit || showAssess) && (
+            <Stack direction="row" gap={1} sx={{ mb: 1 }}>
+              {showEdit && (
+                <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onEdit}>
+                  Edit Risk
+                </Button>
+              )}
+              {showAssess && (
+                <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onAssess}>
+                  Assess Risk
+                </Button>
+              )}
+            </Stack>
+          )}
+          {showComplete && (
+            <Button variant="contained" fullWidth disabled={disabled} onClick={actions.onComplete}>
+              Submit for Approval
             </Button>
-            <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onAssess}>
-              Assess Risk
-            </Button>
-          </Stack>
-          <Button variant="contained" fullWidth disabled={disabled} onClick={actions.onComplete}>
-            Submit for Approval
-          </Button>
+          )}
         </Box>
       );
+    }
 
-    case "PENDING_REVISION":
+    case "PENDING_REVISION": {
+      const showEdit = can(RiskPrivilege.UpdateRisk);
+      const showResubmit = can(RiskPrivilege.SubmitRisk);
+      if (!showEdit && !showResubmit) return null;
       return (
         <Box sx={{ pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
           <Stack direction="row" gap={1}>
-            <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onEdit}>
-              Edit Risk
-            </Button>
-            <Button variant="contained" color="primary" fullWidth disabled={disabled} onClick={actions.onResubmit}>
-              Resubmit
-            </Button>
+            {showEdit && (
+              <Button variant="outlined" fullWidth disabled={disabled} onClick={actions.onEdit}>
+                Edit Risk
+              </Button>
+            )}
+            {showResubmit && (
+              <Button variant="contained" color="primary" fullWidth disabled={disabled} onClick={actions.onResubmit}>
+                Resubmit
+              </Button>
+            )}
           </Stack>
         </Box>
       );
+    }
 
     case "PENDING_COMPLIANCE_CLOSURE":
+      if (!can(RiskPrivilege.CloseRisk)) return null;
       return (
         <Box sx={{ pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
           <Button variant="contained" fullWidth disabled={disabled} onClick={actions.onCloseRisk}>
@@ -191,6 +244,7 @@ export default function RiskDetailDrawer({
   loading,
   error,
   actionsDisabled,
+  can,
   onClose,
   ...actions
 }: RiskDetailDrawerProps): JSX.Element {
@@ -429,7 +483,7 @@ export default function RiskDetailDrawer({
       {/* Fixed action footer */}
       {detail && !loading && !error && (
         <Box sx={{ px: 3, pb: 3, pt: 0 }}>
-          <ActionFooter status={status} actions={actions} disabled={actionsDisabled} />
+          <ActionFooter status={status} actions={actions} disabled={actionsDisabled} can={can} />
         </Box>
       )}
     </Drawer>

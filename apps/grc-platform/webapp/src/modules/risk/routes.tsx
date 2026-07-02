@@ -19,15 +19,17 @@ import RiskDashboard from "@modules/risk/pages/RiskDashboard";
 import RiskRegisters from "@modules/risk/pages/RiskRegisters";
 import AddRisk from "@modules/risk/pages/AddRisk";
 import RiskAnalytics from "@modules/risk/pages/RiskAnalytics";
+import PrivilegeGuard from "./components/PrivilegeGuard";
+import { RiskPrivilege } from "./privileges";
 
 // Risk Hub routes, mounted under /risk by App.tsx. Owned by the Risk module —
 // add Risk pages here without touching the shared App.tsx.
 export const riskRoutes = (
   <Route path="risk">
     <Route index element={<Navigate to="dashboard" replace />} />
-    <Route path="dashboard" element={<RiskDashboard />} />
-    <Route path="registers" element={<RiskRegisters />} />
-    <Route path="add" element={<AddRisk />} />
-    <Route path="analytics" element={<RiskAnalytics />} />
+    <Route path="dashboard" element={<PrivilegeGuard privilege={RiskPrivilege.ViewRisks}><RiskDashboard /></PrivilegeGuard>} />
+    <Route path="registers" element={<PrivilegeGuard privilege={RiskPrivilege.ViewRisks}><RiskRegisters /></PrivilegeGuard>} />
+    <Route path="add" element={<PrivilegeGuard privilege={RiskPrivilege.CreateRisk}><AddRisk /></PrivilegeGuard>} />
+    <Route path="analytics" element={<PrivilegeGuard privilege={RiskPrivilege.ViewAnalytics}><RiskAnalytics /></PrivilegeGuard>} />
   </Route>
 );
