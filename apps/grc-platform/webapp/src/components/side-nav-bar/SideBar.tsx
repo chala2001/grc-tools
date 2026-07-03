@@ -47,6 +47,12 @@ export default function SideBar({
   const navigate = useNavigate();
   const { can: canRisk, loading: riskPrivsLoading } = useRiskPrivileges();
 
+  // Map section id → privilege resolver. Add an entry here when a new module
+  // introduces nav items with requiredPrivilege.
+  const sectionPrivs: Record<string, { can: (p: string) => boolean; loading: boolean }> = {
+    risk: { can: canRisk, loading: riskPrivsLoading },
+  };
+
   // When true, the sidebar is temporarily expanded from collapsed state on click.
   const [tempExpanded, setTempExpanded] = useState(false);
 
@@ -124,10 +130,10 @@ export default function SideBar({
         <Sidebar.Nav>
           <Sidebar.Category>
             {SECTIONS.map((section, idx) => {
+              const privs = sectionPrivs[section.id];
               const visibleItems = section.items.filter((item) => {
-                if (!item.requiredPrivilege) return true;
-                if (section.id === "risk") return !riskPrivsLoading && canRisk(item.requiredPrivilege);
-                return true;
+                if (!item.requiredPrivilege || !privs) return true;
+                return !privs.loading && privs.can(item.requiredPrivilege);
               });
               return (
                 <Box key={section.id}>

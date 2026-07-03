@@ -16,6 +16,7 @@
 
 import { BarChart2, ClipboardList, LayoutDashboard, PlusCircle, ShieldAlert } from "@wso2/oxygen-ui-icons-react";
 import type { NavSection } from "@components/side-nav-bar/types";
+import { RiskPrivilege } from "./privileges";
 
 // Risk Hub sidebar section. Owned by the Risk module — add Risk nav items
 // here without touching the shared SideBar component.
@@ -29,28 +30,28 @@ export const riskNav: NavSection = {
       label: "Dashboard",
       path: "/risk/dashboard",
       icon: LayoutDashboard,
-      requiredPrivilege: "VIEW_RISKS",
+      requiredPrivilege: RiskPrivilege.ViewRisks,
     },
     {
       id: "risk-registers",
       label: "Risk Registers",
       path: "/risk/registers",
       icon: ClipboardList,
-      requiredPrivilege: "VIEW_RISKS",
+      requiredPrivilege: RiskPrivilege.ViewRisks,
     },
     {
       id: "risk-add",
       label: "Add Risk",
       path: "/risk/add",
       icon: PlusCircle,
-      requiredPrivilege: "CREATE_RISK",
+      requiredPrivilege: RiskPrivilege.CreateRisk,
     },
     {
       id: "risk-analytics",
       label: "Analytics",
       path: "/risk/analytics",
       icon: BarChart2,
-      requiredPrivilege: "VIEW_ANALYTICS",
+      requiredPrivilege: RiskPrivilege.ViewAnalytics,
     },
   ],
 };
