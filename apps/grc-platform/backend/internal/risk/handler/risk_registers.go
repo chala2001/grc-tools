@@ -264,7 +264,7 @@ func (d *Deps) handleRejectRisk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := d.Risk.Reject(r.Context(), id, req, by); err != nil {
+	if err := d.Risk.Reject(r.Context(), id, req, detail.WorkflowStatus, by); err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}

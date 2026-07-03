@@ -32,6 +32,9 @@ import (
 // Returns a preview of the next available sequence number for the risk code.
 // This does not reserve the number — the actual code is assigned atomically on POST.
 func (d *Deps) handleNextSequenceID(w http.ResponseWriter, r *http.Request) {
+	if !auth.RequirePrivilege(r.Context(), w, privilege.CreateRisk) {
+		return
+	}
 	q := r.URL.Query()
 
 	sourceRegisterIDStr := q.Get("source_register_id")

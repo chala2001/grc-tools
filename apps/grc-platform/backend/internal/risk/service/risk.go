@@ -42,7 +42,7 @@ type RiskService interface {
 	OwnerApprove(ctx context.Context, id int, byUserEmail string) error
 	ManagementApprove(ctx context.Context, id int, byUserEmail string) error
 	Approve(ctx context.Context, id int, byUserEmail string) error
-	Reject(ctx context.Context, id int, req model.RejectRiskRequest, byUserEmail string) error
+	Reject(ctx context.Context, id int, req model.RejectRiskRequest, fromStatus, byUserEmail string) error
 	Complete(ctx context.Context, id int, byUserEmail string) error
 	Resubmit(ctx context.Context, id int, byUserEmail string) error
 	Close(ctx context.Context, id int, byUserEmail string) error
@@ -137,18 +137,17 @@ func (s *riskService) Approve(ctx context.Context, id int, byUserEmail string) e
 }
 
 // Reject routes rejections from any pending-approval stage back to PENDING_REVISION
-// and records where the rejection occurred.
-func (s *riskService) Reject(ctx context.Context, id int, req model.RejectRiskRequest, byUserEmail string) error {
+// and records where the rejection occurred. fromStatus is the status the caller
+// was authorized against — the transition is CAS-keyed on it, so a concurrent
+// status change fails with 409 instead of rejecting at a stage the caller never
+// held the privilege for.
+func (s *riskService) Reject(ctx context.Context, id int, req model.RejectRiskRequest, fromStatus, byUserEmail string) error {
 	if req.RejectionComment == "" {
 		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "rejection_comment is required"}
 	}
-	status, err := s.repo.GetWorkflowStatus(ctx, id)
-	if err != nil {
-		return err
-	}
 
 	var stage string
-	switch status {
+	switch fromStatus {
 	case model.StatusPendingOwnerApproval, model.StatusPendingAmendment:
 		stage = "OWNER"
 	case model.StatusPendingManagementApproval:
@@ -158,10 +157,10 @@ func (s *riskService) Reject(ctx context.Context, id int, req model.RejectRiskRe
 	case model.StatusPendingOwnerCompletion:
 		stage = "COMPLETION_OWNER"
 	default:
-		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be rejected from status: %s", status)}
+		return &apierror.Error{StatusCode: http.StatusConflict, Body: fmt.Sprintf("cannot be rejected from status: %s", fromStatus)}
 	}
 
-	return s.repo.RejectTransition(ctx, id, req.RejectionComment, stage, status, byUserEmail)
+	return s.repo.RejectTransition(ctx, id, req.RejectionComment, stage, fromStatus, byUserEmail)
 }
 
 // Complete moves IN_REMEDIATION → PENDING_OWNER_COMPLETION_APPROVAL.

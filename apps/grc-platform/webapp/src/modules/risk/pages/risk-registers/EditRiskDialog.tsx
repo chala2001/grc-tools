@@ -147,8 +147,10 @@ export default function EditRiskDialog({
   const [implementationDate, setImplementationDate] = useState<Date | null>(
     parseDateOnly(detail.implementation_date),
   );
-  const [actionSteps, setActionSteps] = useState<string[]>(
-    detail.action_plan?.steps.map((s) => s.description) ?? [],
+  // Steps keep their DB id so the backend can update in place and preserve
+  // status/completed_date; newly added steps have no id.
+  const [actionSteps, setActionSteps] = useState<{ id?: number; description: string }[]>(
+    detail.action_plan?.steps.map((s) => ({ id: s.id, description: s.description })) ?? [],
   );
   const [emailSubject, setEmailSubject] = useState(detail.email_subject ?? "");
 
@@ -178,7 +180,7 @@ export default function EditRiskDialog({
     setGitIssueUrl(detail.git_issue_url ?? "");
     setRemarks(detail.remarks ?? "");
     setImplementationDate(parseDateOnly(detail.implementation_date));
-    setActionSteps(detail.action_plan?.steps.map((s) => s.description) ?? []);
+    setActionSteps(detail.action_plan?.steps.map((s) => ({ id: s.id, description: s.description })) ?? []);
     setEmailSubject(detail.email_subject ?? "");
     setErrors({});
     setApiError("");
@@ -210,7 +212,7 @@ export default function EditRiskDialog({
     }
     if (!emailSubject.trim()) e.emailSubject = "Email subject is required.";
     actionSteps.forEach((s, i) => {
-      if (!s.trim()) e[`step_${i}`] = "Step description cannot be empty.";
+      if (!s.description.trim()) e[`step_${i}`] = "Step description cannot be empty.";
     });
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -228,7 +230,7 @@ export default function EditRiskDialog({
         email_subject: emailSubject.trim(),
         implementation_date: toDateOnlyString(implementationDate),
         action_steps: actionSteps.length > 0
-          ? actionSteps.map((d) => ({ description: d.trim() }))
+          ? actionSteps.map((s) => ({ id: s.id, description: s.description.trim() }))
           : undefined,
       };
 
@@ -280,10 +282,10 @@ export default function EditRiskDialog({
             <TextField
               size="small"
               fullWidth
-              value={step}
+              value={step.description}
               onChange={(e) => {
                 const next = [...actionSteps];
-                next[idx] = e.target.value;
+                next[idx] = { ...next[idx], description: e.target.value };
                 setActionSteps(next);
                 if (errors[`step_${idx}`]) setErrors((p) => ({ ...p, [`step_${idx}`]: "" }));
               }}
@@ -306,7 +308,7 @@ export default function EditRiskDialog({
         <Button
           size="small"
           startIcon={<Plus size={14} />}
-          onClick={() => setActionSteps([...actionSteps, ""])}
+          onClick={() => setActionSteps([...actionSteps, { description: "" }])}
           disabled={submitting}
           sx={{ alignSelf: "flex-start" }}
         >

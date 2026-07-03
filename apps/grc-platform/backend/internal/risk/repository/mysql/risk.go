@@ -534,23 +534,27 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 			stepsChanged = true
 		} else {
 			stepRows, stepErr := r.db.QueryContext(ctx,
-				"SELECT description FROM risk_action_step WHERE plan_id = ? ORDER BY step_no", planID)
+				"SELECT id, description FROM risk_action_step WHERE plan_id = ? ORDER BY step_no", planID)
 			if stepErr != nil {
 				stepsChanged = true
 			} else {
-				var curDescs []string
+				type curStep struct {
+					id   int
+					desc string
+				}
+				var curSteps []curStep
 				for stepRows.Next() {
-					var desc string
-					if stepRows.Scan(&desc) == nil {
-						curDescs = append(curDescs, desc)
+					var s curStep
+					if stepRows.Scan(&s.id, &s.desc) == nil {
+						curSteps = append(curSteps, s)
 					}
 				}
 				stepRows.Close()
-				if len(curDescs) != len(req.ActionSteps) {
+				if len(curSteps) != len(req.ActionSteps) {
 					stepsChanged = true
 				} else {
 					for i, step := range req.ActionSteps {
-						if curDescs[i] != step.Description {
+						if step.ID == nil || *step.ID != curSteps[i].id || curSteps[i].desc != step.Description {
 							stepsChanged = true
 							break
 						}
@@ -562,6 +566,11 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 			restrictedChanged = true
 		}
 	}
+
+	// Switching identified_by_type invalidates the counterpart field: an EMPLOYEE
+	// risk keeps no free-text name, a TOOL/EXTERNAL_PERSON risk keeps no user id.
+	clearIdentifiedByUser := req.IdentifiedByType == "EXTERNAL_PERSON" || req.IdentifiedByType == "TOOL"
+	clearIdentifiedByName := req.IdentifiedByType == "EMPLOYEE"
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -575,8 +584,8 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 			risk_title = ?, risk_description = ?,
 			risk_identified_date = COALESCE(NULLIF(?,''), risk_identified_date),
 			identified_by_type = COALESCE(NULLIF(?,''), identified_by_type),
-			identified_by_user_id = COALESCE(?, identified_by_user_id),
-			identified_by_name = COALESCE(?, identified_by_name),
+			identified_by_user_id = CASE WHEN ? THEN NULL ELSE COALESCE(?, identified_by_user_id) END,
+			identified_by_name = CASE WHEN ? THEN NULL ELSE COALESCE(?, identified_by_name) END,
 			assigner_id = COALESCE(?, assigner_id),
 			owner_id = COALESCE(?, owner_id),
 			impact_description = COALESCE(NULLIF(?,''), impact_description),
@@ -593,7 +602,8 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 		WHERE id = ?`,
 		req.RiskTitle, req.RiskDescription,
 		req.RiskIdentifiedDate, req.IdentifiedByType,
-		req.IdentifiedByUserID, req.IdentifiedByName,
+		clearIdentifiedByUser, req.IdentifiedByUserID,
+		clearIdentifiedByName, req.IdentifiedByName,
 		req.AssignerID, req.OwnerID,
 		req.ImpactDescription,
 		req.Progress, req.GitIssueURL, req.EmailSubject, req.Remarks,
@@ -632,7 +642,9 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 		}
 	}
 
-	// Replace action steps only when content actually changed, to preserve step status and completed_date.
+	// Diff action steps by ID so untouched steps keep their status and
+	// completed_date: update existing steps in place, insert only new ones,
+	// delete only steps removed from the payload.
 	if stepsChanged {
 		var planID int
 		if err = tx.QueryRowContext(ctx,
@@ -640,16 +652,55 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 		).Scan(&planID); err != nil {
 			return fmt.Errorf("find action plan for step update: %w", err)
 		}
-		if _, err = tx.ExecContext(ctx, "DELETE FROM risk_action_step WHERE plan_id = ?", planID); err != nil {
-			return fmt.Errorf("clear action steps: %w", err)
+
+		existing := make(map[int]bool)
+		idRows, err := tx.QueryContext(ctx, "SELECT id FROM risk_action_step WHERE plan_id = ?", planID)
+		if err != nil {
+			return fmt.Errorf("load existing step ids: %w", err)
 		}
+		for idRows.Next() {
+			var stepID int
+			if err = idRows.Scan(&stepID); err != nil {
+				idRows.Close()
+				return fmt.Errorf("scan existing step id: %w", err)
+			}
+			existing[stepID] = true
+		}
+		idRows.Close()
+		if err = idRows.Err(); err != nil {
+			return fmt.Errorf("iterate existing step ids: %w", err)
+		}
+
+		kept := make(map[int]bool)
 		for i, step := range req.ActionSteps {
-			if _, err = tx.ExecContext(ctx, `
-				INSERT INTO risk_action_step (plan_id, step_no, description, status, created_by, updated_by)
-				VALUES (?, ?, ?, 'PENDING', ?, ?)`,
-				planID, i+1, step.Description, updatedBy, updatedBy,
-			); err != nil {
-				return fmt.Errorf("insert updated step %d: %w", i+1, err)
+			// Stale or foreign IDs (not in this plan) are treated as new steps.
+			if step.ID != nil && existing[*step.ID] {
+				if _, err = tx.ExecContext(ctx, `
+					UPDATE risk_action_step SET step_no = ?, description = ?, updated_by = ?
+					WHERE id = ? AND plan_id = ?`,
+					i+1, step.Description, updatedBy, *step.ID, planID,
+				); err != nil {
+					return fmt.Errorf("update step %d: %w", i+1, err)
+				}
+				kept[*step.ID] = true
+			} else {
+				if _, err = tx.ExecContext(ctx, `
+					INSERT INTO risk_action_step (plan_id, step_no, description, status, created_by, updated_by)
+					VALUES (?, ?, ?, 'PENDING', ?, ?)`,
+					planID, i+1, step.Description, updatedBy, updatedBy,
+				); err != nil {
+					return fmt.Errorf("insert new step %d: %w", i+1, err)
+				}
+			}
+		}
+
+		for stepID := range existing {
+			if !kept[stepID] {
+				if _, err = tx.ExecContext(ctx,
+					"DELETE FROM risk_action_step WHERE id = ? AND plan_id = ?", stepID, planID,
+				); err != nil {
+					return fmt.Errorf("delete removed step %d: %w", stepID, err)
+				}
 			}
 		}
 	}
@@ -675,13 +726,23 @@ func (r *riskRepository) Update(ctx context.Context, id int, req model.UpdateRis
 	}
 
 	// If a restricted field changed on an IN_REMEDIATION risk, atomically mark it
-	// as UPDATED and move it to PENDING_AMENDMENT in the same transaction.
+	// as UPDATED and move it to PENDING_AMENDMENT in the same transaction. The
+	// status was read before the transaction began, so guard the write with it:
+	// a concurrent transition (e.g. Complete) rolls the whole edit back with 409.
 	if restrictedChanged && curStatus.String == model.StatusInRemediation {
-		if _, err = tx.ExecContext(ctx,
-			"UPDATE risk SET risk_type = ?, workflow_status = ?, updated_by = ?, updated_at = NOW() WHERE id = ?",
-			model.RiskTypeUpdated, model.StatusPendingAmendment, updatedBy, id,
-		); err != nil {
-			return fmt.Errorf("set amendment status: %w", err)
+		res, aerr := tx.ExecContext(ctx,
+			"UPDATE risk SET risk_type = ?, workflow_status = ?, updated_by = ?, updated_at = NOW() WHERE id = ? AND workflow_status = ?",
+			model.RiskTypeUpdated, model.StatusPendingAmendment, updatedBy, id, model.StatusInRemediation,
+		)
+		if aerr != nil {
+			return fmt.Errorf("set amendment status: %w", aerr)
+		}
+		n, aerr := res.RowsAffected()
+		if aerr != nil {
+			return fmt.Errorf("set amendment status rows: %w", aerr)
+		}
+		if n == 0 {
+			return &apierror.Error{StatusCode: http.StatusConflict, Body: "concurrent modification: workflow status changed"}
 		}
 	}
 

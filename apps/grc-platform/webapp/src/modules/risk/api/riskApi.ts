@@ -201,7 +201,7 @@ export interface UpdateRiskPayload {
   assignment_team_id?: number;
   action_plan_description?: string;
   action_owner_id?: number;
-  action_steps?: { description: string }[];
+  action_steps?: { id?: number; description: string }[];
 }
 
 export interface CreateAssessmentPayload {
