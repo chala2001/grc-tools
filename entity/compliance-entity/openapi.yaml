@@ -933,24 +933,6 @@ paths:
                 $ref: '#/components/schemas/ListEvidenceFilesResponse'
         '400': *id001
         '500': *id002
-  /evidence/files/{fileId}:
-    delete:
-      tags:
-      - Evidence
-      summary: Delete an evidence file
-      operationId: deleteEvidenceFile
-      parameters:
-      - name: fileId
-        in: path
-        required: true
-        schema:
-          type: integer
-      responses:
-        '204':
-          description: No content
-        '400': *id001
-        '404': *id003
-        '500': *id002
   /evidence/{evidenceId}/comments:
     post:
       tags:
@@ -2026,7 +2008,7 @@ paths:
                 $ref: '#/components/schemas/ListRiskEvidenceResponse'
         '400': *id001
         '500': *id002
-  /risks/evidence/{fileId}:
+  /risk-evidence/{fileId}:
     delete:
       tags:
       - Risk Evidence
@@ -2340,7 +2322,24 @@ paths:
         '400': *id001
         '404': *id003
         '500': *id002
-  /audit/dashboard:
+    delete:
+      tags:
+      - Audit Evidence
+      summary: Delete an evidence file
+      operationId: deleteEvidenceFile
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '204':
+          description: No content
+        '400': *id001
+        '404': *id003
+        '500': *id002
+  /audit/dashboard/search:
     post:
       tags:
       - Audit Dashboard
