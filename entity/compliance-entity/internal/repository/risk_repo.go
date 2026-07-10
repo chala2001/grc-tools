@@ -287,11 +287,33 @@ func (r *riskRepo) UpdateRisk(ctx context.Context, id int, req domain.UpdateRisk
 	}
 	sets = append(sets, "updated_by = ?")
 	args = append(args, req.UpdatedBy)
-	args = append(args, id)
 
-	if _, err := r.db.ExecContext(ctx,
-		"UPDATE risk SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...); err != nil { // #nosec G202
+	var (
+		query  string
+		result sql.Result
+		err    error
+	)
+	if req.ExpectedStatus != "" {
+		args = append(args, id, req.ExpectedStatus)
+		query = "UPDATE risk SET " + strings.Join(sets, ", ") + " WHERE id = ? AND workflow_status = ?" // #nosec G202
+	} else {
+		args = append(args, id)
+		query = "UPDATE risk SET " + strings.Join(sets, ", ") + " WHERE id = ?" // #nosec G202
+	}
+	if result, err = r.db.ExecContext(ctx, query, args...); err != nil {
 		return nil, fmt.Errorf("risk.Update(%d): %w", id, err)
+	}
+	if req.ExpectedStatus != "" {
+		if n, _ := result.RowsAffected(); n == 0 {
+			current, err := r.GetRiskByID(ctx, id)
+			if err != nil {
+				return nil, err // propagates NotFoundError if record was deleted
+			}
+			if current.WorkflowStatus == req.ExpectedStatus && (req.WorkflowStatus == nil || *req.WorkflowStatus == req.ExpectedStatus) {
+				return current, nil // MySQL no-op: status not being changed, or already at the target value
+			}
+			return nil, &apierror.ConflictError{Msg: "risk was modified concurrently, please retry"}
+		}
 	}
 	return r.GetRiskByID(ctx, id)
 }

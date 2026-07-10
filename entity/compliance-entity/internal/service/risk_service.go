@@ -199,6 +199,7 @@ func (s *riskService) UpdateRisk(ctx context.Context, id int, req domain.UpdateR
 				Msg: "invalid workflow transition: " + current.WorkflowStatus + " → " + *req.WorkflowStatus,
 			}
 		}
+		req.ExpectedStatus = current.WorkflowStatus
 	}
 	if req.TreatmentStrategy != nil && !validTreatmentStrategies[strings.ToUpper(*req.TreatmentStrategy)] {
 		return domain.Risk{}, &apierror.ValidationError{Msg: "treatmentStrategy must be MITIGATE, ACCEPT, TRANSFER, or VOID"}

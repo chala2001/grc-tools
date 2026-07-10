@@ -841,6 +841,7 @@ type UpdateRiskRequest struct {
 	GitIssueURL            *string `json:"gitIssueUrl"`
 	Remarks                *string `json:"remarks"`
 	UpdatedBy              string  `json:"updatedBy"`
+	ExpectedStatus         string  `json:"-"` // set server-side for atomic transition; never decoded from JSON
 }
 
 // =============================================================================
