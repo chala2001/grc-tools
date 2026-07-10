@@ -25,6 +25,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
@@ -69,6 +70,30 @@ func decodeErrMsg(err error) string {
 		return fmt.Sprintf("unknown field %s in request body", field)
 	}
 	return "invalid request body"
+}
+
+// parsePagination parses the "limit" and "offset" query parameters.
+// If either param is present but not a valid integer, it writes a 400 response
+// and returns ok=false. Missing params default to 0 (the service layer applies
+// the actual default page size via normalizePagination).
+func parsePagination(w http.ResponseWriter, r *http.Request) (limit, offset int, ok bool) {
+	if s := r.URL.Query().Get("limit"); s != "" {
+		v, err := strconv.Atoi(s)
+		if err != nil {
+			writeServiceError(w, r, &apierror.ValidationError{Msg: "limit must be an integer"})
+			return 0, 0, false
+		}
+		limit = v
+	}
+	if s := r.URL.Query().Get("offset"); s != "" {
+		v, err := strconv.Atoi(s)
+		if err != nil {
+			writeServiceError(w, r, &apierror.ValidationError{Msg: "offset must be an integer"})
+			return 0, 0, false
+		}
+		offset = v
+	}
+	return limit, offset, true
 }
 
 // writeServiceError maps a service-layer error to the appropriate HTTP response.

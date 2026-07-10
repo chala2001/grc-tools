@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -45,7 +46,7 @@ func (r *auditTeamRepo) SearchAuditTeams(ctx context.Context, req domain.SearchA
 
 	if req.SearchQuery != "" {
 		where += " AND name LIKE ?"
-		args = append(args, "%"+req.SearchQuery+"%")
+		args = append(args, "%"+likeEscape(req.SearchQuery)+"%")
 	}
 	if req.StatusKey != "" {
 		where += " AND status = ?"
@@ -82,7 +83,7 @@ func (r *auditTeamRepo) GetAuditTeamByID(ctx context.Context, id int) (*domain.A
 	err := r.db.QueryRowContext(ctx,
 		"SELECT id, name, status, created_at, updated_at FROM audit_team WHERE id = ?", id).
 		Scan(&t.ID, &t.Name, &t.Status, &t.CreatedOn, &t.UpdatedOn)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("audit team %d not found", id)}
 	}
 	if err != nil {

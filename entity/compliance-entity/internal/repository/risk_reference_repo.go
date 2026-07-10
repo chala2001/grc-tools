@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -47,7 +48,7 @@ func (r *riskReferenceRepo) SearchRiskReferences(ctx context.Context, req domain
 
 	if req.SearchQuery != "" {
 		where += " AND name LIKE ?"
-		args = append(args, "%"+req.SearchQuery+"%")
+		args = append(args, "%"+likeEscape(req.SearchQuery)+"%")
 	}
 
 	var total int
@@ -81,7 +82,7 @@ func (r *riskReferenceRepo) GetRiskReferenceByID(ctx context.Context, id int) (*
 	row := r.db.QueryRowContext(ctx,
 		"SELECT id, name, description, created_at, updated_at FROM risk_security_compliance_reference WHERE id = ?", id)
 	ref, err := scanRiskReference(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("compliance reference %d not found", id)}
 	}
 	if err != nil {

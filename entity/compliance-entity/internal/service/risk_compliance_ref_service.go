@@ -40,9 +40,6 @@ func (s *riskComplianceRefService) AddRiskComplianceRef(ctx context.Context, ris
 	if req.ReferenceID <= 0 {
 		return domain.RiskComplianceRefLink{}, &apierror.ValidationError{Msg: "referenceId must be a positive integer"}
 	}
-	if req.CreatedBy == "" {
-		return domain.RiskComplianceRefLink{}, &apierror.ValidationError{Msg: "createdBy is required"}
-	}
 	link, err := s.repo.AddRiskComplianceRef(ctx, riskID, req)
 	if err != nil {
 		return domain.RiskComplianceRefLink{}, err

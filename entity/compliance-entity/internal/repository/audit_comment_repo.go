@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
@@ -106,7 +107,7 @@ func scanAuditComment(s scanner) (*domain.AuditComment, error) {
 		&c.ID, &c.EvidenceID, &authorID, &parentID,
 		&c.Content, &c.IsInternal, &createdBy, &c.CreatedOn, &c.UpdatedOn,
 	)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: "comment not found"}
 	}
 	if err != nil {

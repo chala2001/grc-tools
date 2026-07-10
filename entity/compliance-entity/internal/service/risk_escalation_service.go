@@ -43,6 +43,13 @@ func (s *riskEscalationService) CreateRiskEscalation(ctx context.Context, riskID
 	if req.EscalatedTo <= 0 {
 		return domain.RiskEscalation{}, &apierror.ValidationError{Msg: "escalatedTo must be a positive integer"}
 	}
+	if req.NewTreatmentStrategy != nil {
+		up := strings.ToUpper(*req.NewTreatmentStrategy)
+		if !validTreatmentStrategies[up] {
+			return domain.RiskEscalation{}, &apierror.ValidationError{Msg: "newTreatmentStrategy must be MITIGATE, ACCEPT, TRANSFER, or VOID"}
+		}
+		req.NewTreatmentStrategy = &up
+	}
 	if req.CreatedBy == "" {
 		return domain.RiskEscalation{}, &apierror.ValidationError{Msg: "createdBy is required"}
 	}
@@ -77,8 +84,19 @@ func (s *riskEscalationService) UpdateRiskEscalation(ctx context.Context, riskID
 	if req.UpdatedBy == "" {
 		return domain.RiskEscalation{}, &apierror.ValidationError{Msg: "updatedBy is required"}
 	}
-	if req.Status != nil && !validEscalationStatuses[strings.ToUpper(*req.Status)] {
-		return domain.RiskEscalation{}, &apierror.ValidationError{Msg: "invalid status: " + *req.Status}
+	if req.Status != nil {
+		up := strings.ToUpper(*req.Status)
+		if !validEscalationStatuses[up] {
+			return domain.RiskEscalation{}, &apierror.ValidationError{Msg: "invalid status: " + *req.Status}
+		}
+		req.Status = &up
+	}
+	if req.NewTreatmentStrategy != nil {
+		up := strings.ToUpper(*req.NewTreatmentStrategy)
+		if !validTreatmentStrategies[up] {
+			return domain.RiskEscalation{}, &apierror.ValidationError{Msg: "newTreatmentStrategy must be MITIGATE, ACCEPT, TRANSFER, or VOID"}
+		}
+		req.NewTreatmentStrategy = &up
 	}
 	e, err := s.repo.UpdateRiskEscalation(ctx, riskID, escalationID, req)
 	if err != nil {

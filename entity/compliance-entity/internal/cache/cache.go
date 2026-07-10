@@ -16,6 +16,12 @@
 
 // Package cache provides a generic in-memory TTL cache backed by a sync.RWMutex.
 // It has no external dependencies and is safe for concurrent use.
+//
+// Each cache is per-process. In a multi-replica deployment (e.g. Choreo horizontal
+// scaling), a write through one replica does not invalidate the caches of other
+// replicas — reads can be stale by up to the configured TTL. This is an accepted
+// trade-off for low-churn reference data (users, frameworks) where brief staleness
+// is preferable to a distributed cache dependency.
 package cache
 
 import (
@@ -44,11 +50,23 @@ func New[K comparable, V any](ttl time.Duration) *Cache[K, V] {
 }
 
 // Get returns the cached value and true if the key exists and has not expired.
+// Expired entries are deleted on read so the map does not grow without bound.
 func (c *Cache[K, V]) Get(key K) (V, bool) {
 	c.mu.RLock()
 	e, ok := c.items[key]
 	c.mu.RUnlock()
-	if !ok || time.Now().After(e.expiresAt) {
+	if !ok {
+		var zero V
+		return zero, false
+	}
+	if time.Now().After(e.expiresAt) {
+		c.mu.Lock()
+		// Re-check under the write lock: a concurrent Set may have refreshed the
+		// entry between the RUnlock above and this Lock.
+		if cur, still := c.items[key]; still && time.Now().After(cur.expiresAt) {
+			delete(c.items, key)
+		}
+		c.mu.Unlock()
 		var zero V
 		return zero, false
 	}

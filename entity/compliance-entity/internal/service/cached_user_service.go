@@ -25,9 +25,9 @@ import (
 )
 
 type cachedUserService struct {
-	inner      UserService
-	byID       *cache.Cache[int, domain.User]
-	byEmail    *cache.Cache[string, domain.User]
+	inner   UserService
+	byID    *cache.Cache[int, domain.User]
+	byEmail *cache.Cache[string, domain.User]
 }
 
 // NewCachedUserService wraps inner with a 5-minute in-memory cache on GetUserByID

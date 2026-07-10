@@ -81,8 +81,15 @@ func (s *Service) ContainerURL() string {
 }
 
 // BlobURL returns the full HTTPS URL for a blob by its full name within the container.
+// Each path segment is percent-encoded so filenames with #, ?, or % do not truncate
+// or corrupt the URL. The canonical resource for Shared Key auth uses the raw blobName
+// (pre-encoding) which is what Azure expects per the Shared Key specification.
 func (s *Service) BlobURL(blobName string) string {
-	return s.ContainerURL() + "/" + blobName
+	segments := strings.Split(blobName, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+	return s.ContainerURL() + "/" + strings.Join(segments, "/")
 }
 
 // BlobName extracts the blob path from a full blob URL produced by BlobURL.
@@ -187,30 +194,58 @@ func (s *Service) ReadBlob(ctx context.Context, blobName string) (data []byte, c
 }
 
 // ListBlobs returns all blobs whose names start with prefix, using Shared Key auth.
-// prefix should end with "/" to list a logical folder.
+// prefix should end with "/" to list a logical folder. It pages through all Azure
+// results (max 5,000 per call) so the list is never silently truncated.
 func (s *Service) ListBlobs(ctx context.Context, prefix string) ([]BlobItem, error) {
+	var items []BlobItem
+	marker := ""
+	for {
+		page, next, err := s.listBlobsPage(ctx, prefix, marker)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, page...)
+		if next == "" {
+			break
+		}
+		marker = next
+	}
+	return items, nil
+}
+
+// listBlobsPage fetches one page of blob results. marker is "" on the first call.
+// Returns the blobs, the NextMarker for the following page (empty string = done), and any error.
+func (s *Service) listBlobsPage(ctx context.Context, prefix, marker string) ([]BlobItem, string, error) {
 	date := time.Now().UTC().Format(http.TimeFormat)
 
 	q := url.Values{}
 	q.Set("comp", "list")
+	if marker != "" {
+		q.Set("marker", marker)
+	}
 	q.Set("prefix", prefix)
 	q.Set("restype", "container")
 	endpoint := s.ContainerURL() + "?" + q.Encode()
 
-	canonHeaders := "x-ms-date:" + date + "\n" + "x-ms-version:" + azureAPIVersion + "\n"
-	canonResource := fmt.Sprintf("/%s/%s\ncomp:list\nprefix:%s\nrestype:container",
-		s.cfg.AccountName, s.cfg.ContainerName, prefix)
+	// Canonical resource: query parameters must appear alphabetically (comp, marker, prefix, restype).
+	// marker is only included when present — omitting it keeps the signature correct on the first page.
+	canonResource := fmt.Sprintf("/%s/%s\ncomp:list", s.cfg.AccountName, s.cfg.ContainerName)
+	if marker != "" {
+		canonResource += "\nmarker:" + marker
+	}
+	canonResource += "\nprefix:" + prefix + "\nrestype:container"
 
+	canonHeaders := "x-ms-date:" + date + "\n" + "x-ms-version:" + azureAPIVersion + "\n"
 	stringToSign := "GET\n\n\n\n\n\n\n\n\n\n\n\n" + canonHeaders + canonResource
 
 	auth, err := s.sign(stringToSign)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, fmt.Errorf("storage: list build request: %w", err)
+		return nil, "", fmt.Errorf("storage: list build request: %w", err)
 	}
 	req.Header.Set("x-ms-date", date)
 	req.Header.Set("x-ms-version", azureAPIVersion)
@@ -218,17 +253,17 @@ func (s *Service) ListBlobs(ctx context.Context, prefix string) ([]BlobItem, err
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("storage: list blobs: %w", err)
+		return nil, "", fmt.Errorf("storage: list blobs: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("storage: list blobs: azure returned %d: %s", resp.StatusCode, string(body))
+		return nil, "", fmt.Errorf("storage: list blobs: azure returned %d: %s", resp.StatusCode, string(body))
 	}
 
 	var listResp blobListResponse
 	if err := xml.NewDecoder(resp.Body).Decode(&listResp); err != nil {
-		return nil, fmt.Errorf("storage: list blobs decode: %w", err)
+		return nil, "", fmt.Errorf("storage: list blobs decode: %w", err)
 	}
 	items := make([]BlobItem, 0, len(listResp.Blobs.Blob))
 	for _, b := range listResp.Blobs.Blob {
@@ -238,7 +273,7 @@ func (s *Service) ListBlobs(ctx context.Context, prefix string) ([]BlobItem, err
 			Size:        b.Properties.ContentLength,
 		})
 	}
-	return items, nil
+	return items, listResp.NextMarker, nil
 }
 
 // Delete removes the blob with the given full name from the container.
@@ -276,8 +311,9 @@ func (s *Service) Delete(ctx context.Context, blobName string) error {
 
 // blobListResponse is the XML envelope returned by the Azure List Blobs REST API.
 type blobListResponse struct {
-	XMLName xml.Name `xml:"EnumerationResults"`
-	Blobs   struct {
+	XMLName    xml.Name `xml:"EnumerationResults"`
+	NextMarker string   `xml:"NextMarker"`
+	Blobs      struct {
 		Blob []struct {
 			Name       string `xml:"Name"`
 			Properties struct {

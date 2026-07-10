@@ -70,6 +70,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	auditSvc := service.NewAuditService(auditRepo)
 	controlSvc := service.NewControlService(controlRepo)
 	evidenceSvc := service.NewEvidenceService(evidenceRepo)
+	dashboardSvc := service.NewDashboardService(dashboardRepo)
 	populationSvc := service.NewPopulationService(populationRepo)
 	commentSvc := service.NewCommentService(commentRepo)
 	aiValidationSvc := service.NewAIValidationService(aiValidationRepo)
@@ -95,6 +96,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	auditH := handler.NewAuditHandler(auditSvc)
 	controlH := handler.NewControlHandler(controlSvc)
 	evidenceH := handler.NewEvidenceHandler(evidenceSvc)
+	dashboardH := handler.NewDashboardHandler(dashboardSvc)
 	populationH := handler.NewPopulationHandler(populationSvc)
 	commentH := handler.NewCommentHandler(commentSvc)
 	aiValidationH := handler.NewAIValidationHandler(aiValidationSvc)
@@ -170,7 +172,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	mux.HandleFunc("GET /audits/{auditId}/trail", trailH.ListTrail)
 
 	// Controls (cross-audit search; nested CRUD under audits)
-	mux.HandleFunc("POST /audit/dashboard", handler.NewDashboardHandler(dashboardRepo).GetDashboard)
+	mux.HandleFunc("POST /audit/dashboard/search", dashboardH.GetDashboard)
 	mux.HandleFunc("GET /controls/assigned-for-evidence", controlH.ListAssignedForEvidence)
 	mux.HandleFunc("POST /controls/search", controlH.SearchControlsGlobal)
 	mux.HandleFunc("POST /audits/{auditId}/controls/search", controlH.SearchControls)
@@ -190,7 +192,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	// Distinct prefix (not /evidence/...) to avoid a routing conflict with the
 	// list-files pattern above.
 	mux.HandleFunc("GET /evidence-files/{fileId}", evidenceH.GetEvidenceFileByID)
-	mux.HandleFunc("DELETE /evidence/files/{fileId}", evidenceH.DeleteEvidenceFile)
+	mux.HandleFunc("DELETE /evidence-files/{fileId}", evidenceH.DeleteEvidenceFile)
 
 	// Evidence comments (evidence-scoped; flat delete by comment ID)
 	mux.HandleFunc("POST /evidence/{evidenceId}/comments", commentH.CreateComment)
@@ -262,7 +264,7 @@ func NewRouter(db *sql.DB, store *storage.Service) http.Handler {
 	// Risk evidence files (nested under risks)
 	mux.HandleFunc("POST /risks/{riskId}/evidence", riskEvidenceH.CreateRiskEvidence)
 	mux.HandleFunc("GET /risks/{riskId}/evidence", riskEvidenceH.ListRiskEvidence)
-	mux.HandleFunc("DELETE /risks/evidence/{fileId}", riskEvidenceH.DeleteRiskEvidence)
+	mux.HandleFunc("DELETE /risk-evidence/{fileId}", riskEvidenceH.DeleteRiskEvidence)
 
 	// Risk assessments (nested under risks)
 	mux.HandleFunc("POST /risks/{riskId}/assessments", riskAssessmentH.CreateRiskAssessment)

@@ -21,26 +21,26 @@ import (
 	"net/http"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/domain"
-	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/repository"
+	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/service"
 )
 
 // DashboardHandler serves the audit dashboard aggregation.
 type DashboardHandler struct {
-	repo repository.DashboardRepository
+	svc service.DashboardService
 }
 
 // NewDashboardHandler constructs a DashboardHandler.
-func NewDashboardHandler(repo repository.DashboardRepository) *DashboardHandler {
-	return &DashboardHandler{repo: repo}
+func NewDashboardHandler(svc service.DashboardService) *DashboardHandler {
+	return &DashboardHandler{svc: svc}
 }
 
-// GetDashboard handles POST /audit/dashboard. Body: { roles, userEmail }.
+// GetDashboard handles POST /audit/dashboard/search. Body: { roles, userEmail }.
 func (h *DashboardHandler) GetDashboard(w http.ResponseWriter, r *http.Request) {
 	var req domain.AuditDashboardRequest
 	if !decodeRequest(w, r, &req) {
 		return
 	}
-	data, err := h.repo.Get(r.Context(), req)
+	data, err := h.svc.Get(r.Context(), req)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return

@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -51,6 +52,9 @@ func (r *riskActionPlanRepo) CreateRiskActionPlan(ctx context.Context, riskID in
 		req.PlanType,
 		req.CreatedBy, req.CreatedBy)
 	if err != nil {
+		if isFKViolation(err) {
+			return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("risk %d not found", riskID)}
+		}
 		return nil, fmt.Errorf("risk_action_plan.Create: %w", err)
 	}
 	id, _ := res.LastInsertId()
@@ -61,7 +65,7 @@ func (r *riskActionPlanRepo) GetRiskActionPlanByID(ctx context.Context, planID i
 	plan, err := scanRiskActionPlan(r.db.QueryRowContext(ctx,
 		`SELECT id, risk_id, action_owner_id, description, status, DATE_FORMAT(completed_date,'%Y-%m-%d'), plan_type, created_at, updated_at
 		 FROM risk_action_plan WHERE id = ?`, planID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("action plan %d not found", planID)}
 	}
 	if err != nil {

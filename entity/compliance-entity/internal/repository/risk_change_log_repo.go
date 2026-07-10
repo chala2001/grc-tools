@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/domain"
 )
 
@@ -49,6 +50,9 @@ func (r *riskChangeLogRepo) CreateRiskChangeLog(ctx context.Context, riskID int,
 		nullableString(req.NewValue),
 	)
 	if err != nil {
+		if isFKViolation(err) {
+			return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("risk %d not found", riskID)}
+		}
 		return nil, fmt.Errorf("risk_change_log.Create: %w", err)
 	}
 	id, _ := res.LastInsertId()

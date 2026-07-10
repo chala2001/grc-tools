@@ -47,6 +47,9 @@ func (r *riskEvidenceRepo) CreateRiskEvidence(ctx context.Context, riskID int, r
 		nullableString(req.Note),
 		req.EvidenceType, req.CreatedBy)
 	if err != nil {
+		if isFKViolation(err) {
+			return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("risk %d not found", riskID)}
+		}
 		return nil, fmt.Errorf("risk_evidence.Create: %w", err)
 	}
 	id, _ := res.LastInsertId()

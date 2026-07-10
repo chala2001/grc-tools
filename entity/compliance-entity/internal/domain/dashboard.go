@@ -75,19 +75,9 @@ type TeamCompletion struct {
 	Total     int    `json:"total"`
 }
 
-// ActionItem is a single entry in "My Action Items".
-type ActionItem struct {
-	ControlID     int    `json:"controlId"`
-	AuditID       int    `json:"auditId"`
-	AuditName     string `json:"auditName"`
-	ControlNumber string `json:"controlNumber"`
-	Description   string `json:"description"`
-	Status        string `json:"status"`
-	DueDate       string `json:"dueDate"`
-}
-
-// OverdueControl is a single overdue control entry.
-type OverdueControl struct {
+// DashboardControlItem is a single control entry used in both "My Action Items"
+// and "Overdue Controls" dashboard lists. The two lists share the same shape.
+type DashboardControlItem struct {
 	ControlID     int    `json:"controlId"`
 	AuditID       int    `json:"auditId"`
 	AuditName     string `json:"auditName"`
@@ -99,10 +89,10 @@ type OverdueControl struct {
 
 // DashboardData is the full audit dashboard payload.
 type DashboardData struct {
-	AuditStats         AuditStats       `json:"auditStats"`
-	Stats              DashboardStats   `json:"stats"`
-	StatusDistribution []StatusCount    `json:"statusDistribution"`
-	TeamCompletion     []TeamCompletion `json:"teamCompletion"`
-	ActionItems        []ActionItem     `json:"actionItems"`
-	OverdueControls    []OverdueControl `json:"overdueControls"`
+	AuditStats         AuditStats             `json:"auditStats"`
+	Stats              DashboardStats         `json:"stats"`
+	StatusDistribution []StatusCount          `json:"statusDistribution"`
+	TeamCompletion     []TeamCompletion       `json:"teamCompletion"`
+	ActionItems        []DashboardControlItem `json:"actionItems"`
+	OverdueControls    []DashboardControlItem `json:"overdueControls"`
 }

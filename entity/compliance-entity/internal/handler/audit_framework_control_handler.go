@@ -23,12 +23,13 @@ import (
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/domain"
-	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/middleware"
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/service"
 )
 
 // FrameworkControlHandler handles routes under /audit/frameworks/{id}/controls.
-type FrameworkControlHandler struct{ svc service.FrameworkControlService }
+type FrameworkControlHandler struct {
+	svc service.FrameworkControlService
+}
 
 // NewFrameworkControlHandler constructs a FrameworkControlHandler.
 func NewFrameworkControlHandler(svc service.FrameworkControlService) *FrameworkControlHandler {
@@ -70,7 +71,7 @@ func (h *FrameworkControlHandler) ListAllVersions(w http.ResponseWriter, r *http
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"versions": versions})
+	_ = json.NewEncoder(w).Encode(domain.ListFrameworkControlVersionsResponse{Versions: versions})
 }
 
 // CreateControl handles POST /audit/frameworks/{id}/controls.
@@ -84,7 +85,6 @@ func (h *FrameworkControlHandler) CreateControl(w http.ResponseWriter, r *http.R
 	if !decodeRequest(w, r, &req) {
 		return
 	}
-	req.CreatedBy = middleware.UserIDTokenFromContext(r.Context())
 	c, err := h.svc.Create(r.Context(), frameworkID, req)
 	if err != nil {
 		writeServiceError(w, r, err)
@@ -107,7 +107,6 @@ func (h *FrameworkControlHandler) NewVersion(w http.ResponseWriter, r *http.Requ
 	if !decodeRequest(w, r, &req) {
 		return
 	}
-	req.UpdatedBy = middleware.UserIDTokenFromContext(r.Context())
 	c, err := h.svc.NewVersion(r.Context(), controlID, req)
 	if err != nil {
 		writeServiceError(w, r, err)

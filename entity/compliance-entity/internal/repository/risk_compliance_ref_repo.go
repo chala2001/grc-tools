@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
@@ -41,9 +42,16 @@ func NewRiskComplianceRefRepository(db *sql.DB) RiskComplianceRefRepository {
 }
 
 func (r *riskComplianceRefRepo) AddRiskComplianceRef(ctx context.Context, riskID int, req domain.AddRiskComplianceRefRequest) (*domain.RiskComplianceRefLink, error) {
-	if _, err := r.db.ExecContext(ctx,
-		`INSERT IGNORE INTO risk_compliance_reference (risk_id, reference_id) VALUES (?, ?)`,
-		riskID, req.ReferenceID); err != nil {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO risk_compliance_reference (risk_id, reference_id) VALUES (?, ?)`,
+		riskID, req.ReferenceID)
+	if err != nil {
+		if isDuplicateKey(err) {
+			return r.getLink(ctx, riskID, req.ReferenceID)
+		}
+		if isFKViolation(err) {
+			return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("compliance reference %d not found", req.ReferenceID)}
+		}
 		return nil, fmt.Errorf("risk_compliance_reference.Add: %w", err)
 	}
 	return r.getLink(ctx, riskID, req.ReferenceID)
@@ -59,7 +67,7 @@ func (r *riskComplianceRefRepo) getLink(ctx context.Context, riskID, referenceID
 		 WHERE rcr.risk_id = ? AND rcr.reference_id = ?`,
 		riskID, referenceID,
 	).Scan(&link.RiskID, &link.ReferenceID, &link.Name, &desc, &link.CreatedOn)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("compliance reference %d not linked to risk %d", referenceID, riskID)}
 	}
 	if err != nil {

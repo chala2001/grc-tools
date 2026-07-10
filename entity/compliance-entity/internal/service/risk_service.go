@@ -51,6 +51,42 @@ var validRiskStatuses = map[string]bool{
 
 var validRiskQuarters = map[string]bool{"Q1": true, "Q2": true, "Q3": true, "Q4": true}
 
+// allowedRiskTransitions defines the legal next statuses for each risk workflow_status.
+// Happy path: DRAFT → PENDING_RISK_OWNER_APPROVAL → PENDING_MANAGEMENT_APPROVAL →
+// PENDING_COMPLIANCE_REVIEW → IN_REMEDIATION → PENDING_OWNER_COMPLETION_APPROVAL →
+// PENDING_COMPLIANCE_CLOSURE → CLOSED. Plus amendment, revision, escalation, and
+// cancellation paths. CLOSED and CANCELLED are terminal.
+var allowedRiskTransitions = map[string][]string{
+	"DRAFT":                             {"PENDING_RISK_OWNER_APPROVAL", "CANCELLED"},
+	"PENDING_RISK_OWNER_APPROVAL":       {"PENDING_MANAGEMENT_APPROVAL", "PENDING_AMENDMENT", "CANCELLED"},
+	"PENDING_MANAGEMENT_APPROVAL":       {"PENDING_COMPLIANCE_REVIEW", "PENDING_AMENDMENT", "ESCALATED", "CANCELLED"},
+	"PENDING_COMPLIANCE_REVIEW":         {"IN_REMEDIATION", "PENDING_REVISION", "ESCALATED", "CANCELLED"},
+	"IN_REMEDIATION":                    {"PENDING_OWNER_COMPLETION_APPROVAL", "ESCALATED"},
+	"PENDING_OWNER_COMPLETION_APPROVAL": {"PENDING_COMPLIANCE_CLOSURE", "IN_REMEDIATION"},
+	"PENDING_COMPLIANCE_CLOSURE":        {"CLOSED", "IN_REMEDIATION"},
+	"PENDING_AMENDMENT":                 {"PENDING_RISK_OWNER_APPROVAL", "CANCELLED"},
+	"PENDING_REVISION":                  {"PENDING_COMPLIANCE_REVIEW", "CANCELLED"},
+	"ESCALATED":                         {"PENDING_MANAGEMENT_APPROVAL", "CANCELLED"},
+	"CLOSED":                            {},
+	"CANCELLED":                         {},
+}
+
+// isValidRiskTransition reports whether moving from → to is a legal workflow step.
+// A no-op (from == to) and an empty current status are always allowed.
+func isValidRiskTransition(from, to string) bool {
+	from = strings.ToUpper(from)
+	to = strings.ToUpper(to)
+	if from == to || from == "" {
+		return true
+	}
+	for _, next := range allowedRiskTransitions[from] {
+		if next == to {
+			return true
+		}
+	}
+	return false
+}
+
 // validTreatmentStrategies / validIdentifiedByTypes mirror the risk.treatment_strategy
 // and risk.identified_by_type ENUMs in risk_schema.sql. Both columns are nullable,
 // so these are only enforced when a value is provided.
@@ -153,19 +189,17 @@ func (s *riskService) UpdateRisk(ctx context.Context, id int, req domain.UpdateR
 		up := strings.ToUpper(*req.WorkflowStatus)
 		req.WorkflowStatus = &up
 	}
-	// TODO(risk-workflow): enforce the risk workflow_status TRANSITION rules here,
-	// the same way audit_control_service.go / audit_evidence_service.go do it.
-	// Currently only enum-membership is checked above, so a caller can jump to any
-	// valid status (e.g. DRAFT -> CLOSED) and skip owner/management/compliance
-	// approval stages. To implement:
-	//   1. Add an `allowedRiskTransitions map[string][]string` mapping each of the
-	//      12 workflow_status values to its legal next states (register → owner
-	//      approval → management approval → compliance review → remediation →
-	//      completion approval → compliance closure → closed; plus amendment/
-	//      revision/escalated/cancelled paths).
-	//   2. Fetch the current risk (s.repo.GetRiskByID) and reject the update if
-	//      isValidRiskTransition(current.WorkflowStatus, *req.WorkflowStatus) is false.
-	// See isValidControlTransition for the pattern to copy.
+	if req.WorkflowStatus != nil {
+		current, err := s.repo.GetRiskByID(ctx, id)
+		if err != nil {
+			return domain.Risk{}, err
+		}
+		if !isValidRiskTransition(current.WorkflowStatus, *req.WorkflowStatus) {
+			return domain.Risk{}, &apierror.ValidationError{
+				Msg: "invalid workflow transition: " + current.WorkflowStatus + " → " + *req.WorkflowStatus,
+			}
+		}
+	}
 	if req.TreatmentStrategy != nil && !validTreatmentStrategies[strings.ToUpper(*req.TreatmentStrategy)] {
 		return domain.Risk{}, &apierror.ValidationError{Msg: "treatmentStrategy must be MITIGATE, ACCEPT, TRANSFER, or VOID"}
 	}

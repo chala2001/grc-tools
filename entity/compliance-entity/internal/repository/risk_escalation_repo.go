@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -54,6 +55,9 @@ func (r *riskEscalationRepo) CreateRiskEscalation(ctx context.Context, riskID in
 		req.CreatedBy, req.CreatedBy,
 	)
 	if err != nil {
+		if isFKViolation(err) {
+			return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("risk %d not found", riskID)}
+		}
 		return nil, fmt.Errorf("risk_escalation.Create: %w", err)
 	}
 	id, _ := res.LastInsertId()
@@ -65,7 +69,7 @@ func (r *riskEscalationRepo) GetRiskEscalationByID(ctx context.Context, riskID, 
 		`SELECT id, risk_id, escalated_to, reason, new_treatment_strategy,
 		        action_plan_id, decision, status, created_by, updated_by, created_at, updated_at
 		 FROM risk_escalation WHERE id = ? AND risk_id = ?`, escalationID, riskID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("escalation %d not found", escalationID)}
 	}
 	if err != nil {

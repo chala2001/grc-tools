@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/domain"
@@ -34,33 +35,44 @@ type dashboardRepo struct{ db *sql.DB }
 // NewDashboardRepository constructs a DashboardRepository.
 func NewDashboardRepository(db *sql.DB) DashboardRepository { return &dashboardRepo{db: db} }
 
-// resolveScope returns a WHERE fragment (starting with "AND") that restricts
-// audit_control rows to those the user may see, plus any args to bind.
-func (r *dashboardRepo) resolveScope(ctx context.Context, req domain.AuditDashboardRequest) (string, []any) {
+// resolveScope returns a WHERE fragment (starting with "AND"), any args to bind,
+// and an error. Only sql.ErrNoRows and a NULL team/user column are mapped to
+// " AND 1=0" (legitimate no-data cases); any other DB error is propagated so
+// callers return 500 instead of a silent empty dashboard.
+func (r *dashboardRepo) resolveScope(ctx context.Context, req domain.AuditDashboardRequest) (string, []any, error) {
 	switch req.PrimaryRole() {
 	case domain.RoleComplianceAdmin, domain.RoleComplianceTeam, domain.RoleManagement:
-		return "", nil
+		return "", nil, nil
 	case domain.RoleInternalTeam:
 		var teamID sql.NullInt64
 		err := r.db.QueryRowContext(ctx, "SELECT audit_team_id FROM `user` WHERE email = ?", req.UserEmail).Scan(&teamID)
-		if err != nil || !teamID.Valid {
-			return " AND 1=0", nil
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && !teamID.Valid) {
+			return " AND 1=0", nil, nil
 		}
-		return " AND c.team_id = ?", []any{teamID.Int64}
+		if err != nil {
+			return "", nil, fmt.Errorf("dashboard.resolveScope: lookup team for %q: %w", req.UserEmail, err)
+		}
+		return " AND c.team_id = ?", []any{teamID.Int64}, nil
 	case domain.RoleExternalAuditor:
 		var userID sql.NullInt64
 		err := r.db.QueryRowContext(ctx, "SELECT id FROM `user` WHERE email = ?", req.UserEmail).Scan(&userID)
-		if err != nil || !userID.Valid {
-			return " AND 1=0", nil
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && !userID.Valid) {
+			return " AND 1=0", nil, nil
 		}
-		return ` AND c.auditor_id = ?`, []any{userID.Int64}
+		if err != nil {
+			return "", nil, fmt.Errorf("dashboard.resolveScope: lookup user for %q: %w", req.UserEmail, err)
+		}
+		return " AND c.auditor_id = ?", []any{userID.Int64}, nil
 	default:
-		return " AND 1=0", nil
+		return " AND 1=0", nil, nil
 	}
 }
 
 func (r *dashboardRepo) Get(ctx context.Context, req domain.AuditDashboardRequest) (*domain.DashboardData, error) {
-	scope, args := r.resolveScope(ctx, req)
+	scope, args, err := r.resolveScope(ctx, req)
+	if err != nil {
+		return nil, err
+	}
 	baseWhere := "WHERE a.status = 'ACTIVE'" + scope
 
 	// Status distribution.
@@ -183,7 +195,7 @@ func (r *dashboardRepo) queryAuditStats(ctx context.Context) (domain.AuditStats,
 	return s, rows.Err()
 }
 
-func (r *dashboardRepo) queryActionItems(ctx context.Context, req domain.AuditDashboardRequest, baseWhere string, scopeArgs []any) ([]domain.ActionItem, error) {
+func (r *dashboardRepo) queryActionItems(ctx context.Context, req domain.AuditDashboardRequest, baseWhere string, scopeArgs []any) ([]domain.DashboardControlItem, error) {
 	var statusFilter string
 	switch req.PrimaryRole() {
 	case domain.RoleInternalTeam:
@@ -193,7 +205,7 @@ func (r *dashboardRepo) queryActionItems(ctx context.Context, req domain.AuditDa
 	case domain.RoleExternalAuditor:
 		statusFilter = "c.status IN ('EVIDENCE_UNDER_VALIDATION','POPULATION_UNDER_VALIDATION','POPULATION_COMPLETE','AWAITING_SAMPLE')"
 	case domain.RoleManagement:
-		return []domain.ActionItem{}, nil
+		return []domain.DashboardControlItem{}, nil
 	default:
 		statusFilter = "c.status IN ('EVIDENCE_INTERNAL_REVIEW','POPULATION_INTERNAL_REVIEW')"
 	}
@@ -211,18 +223,18 @@ func (r *dashboardRepo) queryActionItems(ctx context.Context, req domain.AuditDa
 		return nil, err
 	}
 	defer rows.Close()
-	items := []domain.ActionItem{}
+	items := []domain.DashboardControlItem{}
 	for rows.Next() {
-		var ai domain.ActionItem
-		if err := rows.Scan(&ai.ControlID, &ai.AuditID, &ai.AuditName, &ai.ControlNumber, &ai.Description, &ai.Status, &ai.DueDate); err != nil {
+		var item domain.DashboardControlItem
+		if err := rows.Scan(&item.ControlID, &item.AuditID, &item.AuditName, &item.ControlNumber, &item.Description, &item.Status, &item.DueDate); err != nil {
 			return nil, err
 		}
-		items = append(items, ai)
+		items = append(items, item)
 	}
 	return items, rows.Err()
 }
 
-func (r *dashboardRepo) queryOverdueControls(ctx context.Context, baseWhere string, scopeArgs []any) ([]domain.OverdueControl, error) {
+func (r *dashboardRepo) queryOverdueControls(ctx context.Context, baseWhere string, scopeArgs []any) ([]domain.DashboardControlItem, error) {
 	q := fmt.Sprintf(`
 		SELECT c.id, c.audit_id, a.name,
 		       COALESCE(c.control_number, fc.control_number, ''),
@@ -238,13 +250,13 @@ func (r *dashboardRepo) queryOverdueControls(ctx context.Context, baseWhere stri
 		return nil, err
 	}
 	defer rows.Close()
-	list := []domain.OverdueControl{}
+	list := []domain.DashboardControlItem{}
 	for rows.Next() {
-		var oc domain.OverdueControl
-		if err := rows.Scan(&oc.ControlID, &oc.AuditID, &oc.AuditName, &oc.ControlNumber, &oc.Description, &oc.Status, &oc.DueDate); err != nil {
+		var item domain.DashboardControlItem
+		if err := rows.Scan(&item.ControlID, &item.AuditID, &item.AuditName, &item.ControlNumber, &item.Description, &item.Status, &item.DueDate); err != nil {
 			return nil, err
 		}
-		list = append(list, oc)
+		list = append(list, item)
 	}
 	return list, rows.Err()
 }

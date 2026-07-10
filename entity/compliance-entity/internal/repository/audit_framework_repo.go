@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -47,7 +48,7 @@ func (r *auditFrameworkRepo) SearchAuditFrameworks(ctx context.Context, req doma
 
 	if req.SearchQuery != "" {
 		where += " AND name LIKE ?"
-		args = append(args, "%"+req.SearchQuery+"%")
+		args = append(args, "%"+likeEscape(req.SearchQuery)+"%")
 	}
 	if req.StatusKey != "" {
 		where += " AND status = ?"
@@ -86,7 +87,7 @@ func (r *auditFrameworkRepo) GetAuditFrameworkByID(ctx context.Context, id int) 
 	row := r.db.QueryRowContext(ctx,
 		"SELECT id, name, status, created_at, updated_at FROM audit_framework WHERE id = ?", id)
 	f, err := scanFramework(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("framework %d not found", id)}
 	}
 	if err != nil {

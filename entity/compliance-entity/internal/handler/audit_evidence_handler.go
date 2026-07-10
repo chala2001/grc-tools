@@ -149,7 +149,7 @@ func (h *EvidenceHandler) ListEvidenceFiles(w http.ResponseWriter, r *http.Reque
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// GetEvidenceFileByID handles GET /evidence/files/{fileId}.
+// GetEvidenceFileByID handles GET /evidence-files/{fileId}.
 func (h *EvidenceHandler) GetEvidenceFileByID(w http.ResponseWriter, r *http.Request) {
 	fileID, err := strconv.Atoi(r.PathValue("fileId"))
 	if err != nil {
@@ -165,7 +165,7 @@ func (h *EvidenceHandler) GetEvidenceFileByID(w http.ResponseWriter, r *http.Req
 	_ = json.NewEncoder(w).Encode(f)
 }
 
-// DeleteEvidenceFile handles DELETE /evidence/files/{fileId}.
+// DeleteEvidenceFile handles DELETE /evidence-files/{fileId}.
 func (h *EvidenceHandler) DeleteEvidenceFile(w http.ResponseWriter, r *http.Request) {
 	fileID, err := strconv.Atoi(r.PathValue("fileId"))
 	if err != nil {

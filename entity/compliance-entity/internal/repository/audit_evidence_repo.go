@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -66,7 +67,7 @@ func (r *evidenceRepo) GetEvidenceByID(ctx context.Context, evidenceID int) (*do
 	err := r.db.QueryRowContext(ctx,
 		"SELECT id, control_id, submitted_by, status, folder_path, reused_from_evidence_id, created_by, created_at, updated_at FROM audit_evidence WHERE id = ?",
 		evidenceID).Scan(&e.ID, &e.ControlID, &submittedBy, &e.Status, &folderPath, &reusedFrom, &createdBy, &e.CreatedOn, &e.UpdatedOn)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("evidence %d not found", evidenceID)}
 	}
 	if err != nil {
@@ -161,8 +162,8 @@ func (r *evidenceRepo) UpdateEvidence(ctx context.Context, evidenceID int, req d
 			if err != nil {
 				return nil, err // propagates NotFoundError if record was deleted
 			}
-			if current.Status == req.ExpectedStatus {
-				return current, nil // MySQL no-op: value unchanged, not a conflict
+			if current.Status == req.ExpectedStatus && req.Status == req.ExpectedStatus {
+				return current, nil // MySQL no-op: status being set to its current value
 			}
 			return nil, &apierror.ConflictError{Msg: "evidence was modified concurrently, please retry"}
 		}
@@ -174,7 +175,7 @@ func (r *evidenceRepo) AddEvidenceFile(ctx context.Context, evidenceID int, req 
 	// Verify the parent evidence exists so a bad id returns 404, not a raw FK 500.
 	var exists int
 	if err := r.db.QueryRowContext(ctx,
-		"SELECT 1 FROM audit_evidence WHERE id = ?", evidenceID).Scan(&exists); err == sql.ErrNoRows {
+		"SELECT 1 FROM audit_evidence WHERE id = ?", evidenceID).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("evidence %d not found", evidenceID)}
 	} else if err != nil {
 		return nil, fmt.Errorf("evidence_file.Add parent check: %w", err)
@@ -208,7 +209,7 @@ func (r *evidenceRepo) getEvidenceFileByID(ctx context.Context, fileID int) (*do
 	err := r.db.QueryRowContext(ctx,
 		"SELECT id, evidence_id, population_id, file_kind, uploaded_by, file_name, file_path, file_type, file_size, created_at FROM audit_evidence_file WHERE id = ?",
 		fileID).Scan(&f.ID, &evidenceID, &populationID, &fileKind, &uploadedBy, &f.FileName, &f.FilePath, &fileType, &fileSize, &f.CreatedOn)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("evidence file %d not found", fileID)}
 	}
 	if err != nil {

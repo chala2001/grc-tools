@@ -50,7 +50,8 @@ func (s *riskEvidenceService) CreateRiskEvidence(ctx context.Context, riskID int
 	if req.FilePath == "" {
 		return domain.RiskEvidenceFile{}, &apierror.ValidationError{Msg: "filePath is required"}
 	}
-	if !validRiskEvidenceTypes[strings.ToUpper(req.EvidenceType)] {
+	req.EvidenceType = strings.ToUpper(req.EvidenceType)
+	if !validRiskEvidenceTypes[req.EvidenceType] {
 		return domain.RiskEvidenceFile{}, &apierror.ValidationError{Msg: "evidenceType must be ACTION_PLAN_ATTACHMENT or FINAL_APPROVAL_ATTACHMENT"}
 	}
 	if req.CreatedBy == "" {

@@ -20,6 +20,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -47,7 +48,7 @@ func (r *userRepo) SearchUsers(ctx context.Context, req domain.SearchUsersReques
 
 	if req.SearchQuery != "" {
 		where += " AND (email LIKE ? OR display_name LIKE ?)"
-		p := "%" + req.SearchQuery + "%"
+		p := "%" + likeEscape(req.SearchQuery) + "%"
 		args = append(args, p, p)
 	}
 	if req.StatusKey != "" {
@@ -85,7 +86,7 @@ func (r *userRepo) GetUserByID(ctx context.Context, id int) (*domain.User, error
 	row := r.db.QueryRowContext(ctx,
 		"SELECT id, email, display_name, audit_team_id, risk_team_id, status, created_at, updated_at FROM `user` WHERE id = ?", id)
 	u, err := scanUser(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("user %d not found", id)}
 	}
 	if err != nil {
@@ -98,7 +99,7 @@ func (r *userRepo) GetUserByEmail(ctx context.Context, email string) (*domain.Us
 	row := r.db.QueryRowContext(ctx,
 		"SELECT id, email, display_name, audit_team_id, risk_team_id, status, created_at, updated_at FROM `user` WHERE email = ?", email)
 	u, err := scanUser(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("user with email %q not found", email)}
 	}
 	if err != nil {

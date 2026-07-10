@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -45,7 +46,7 @@ func (r *riskTeamRepo) SearchRiskTeams(ctx context.Context, req domain.SearchRis
 
 	if req.SearchQuery != "" {
 		where += " AND (name LIKE ? OR code LIKE ?)"
-		p := "%" + req.SearchQuery + "%"
+		p := "%" + likeEscape(req.SearchQuery) + "%"
 		args = append(args, p, p)
 	}
 	if len(req.TeamTypeKeys) > 0 {
@@ -94,7 +95,7 @@ func (r *riskTeamRepo) GetRiskTeamByID(ctx context.Context, id int) (*domain.Ris
 	row := r.db.QueryRowContext(ctx,
 		"SELECT id, name, code, description, team_type, status, created_at, updated_at FROM risk_team WHERE id = ?", id)
 	t, err := scanRiskTeam(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("risk team %d not found", id)}
 	}
 	if err != nil {

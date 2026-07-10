@@ -208,3 +208,8 @@ type RiskChangeLogService interface {
 	CreateRiskChangeLog(ctx context.Context, riskID int, req domain.CreateRiskChangeLogRequest) (domain.RiskChangeLog, error)
 	ListRiskChangeLog(ctx context.Context, riskID int, limit, offset int) (domain.ListRiskChangeLogResponse, error)
 }
+
+// DashboardService defines the read query for the audit dashboard.
+type DashboardService interface {
+	Get(ctx context.Context, req domain.AuditDashboardRequest) (*domain.DashboardData, error)
+}

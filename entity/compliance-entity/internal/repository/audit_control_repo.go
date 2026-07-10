@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -99,136 +100,70 @@ LEFT JOIN audit_team t            ON t.id          = c.team_id
 LEFT JOIN ` + "`user`" + ` u_aud   ON u_aud.id     = c.auditor_id`
 
 func (r *controlRepo) SearchControls(ctx context.Context, auditID int, req domain.SearchControlsRequest) ([]domain.AuditControl, int, error) {
-	args := []any{auditID}
-	where := "WHERE c.audit_id = ?"
-
-	if req.SearchQuery != "" {
-		where += " AND (c.control_number LIKE ? OR c.description LIKE ?)"
-		p := "%" + req.SearchQuery + "%"
-		args = append(args, p, p)
-	}
-	if len(req.StatusKeys) > 0 {
-		ph := strings.Repeat("?,", len(req.StatusKeys))
-		ph = ph[:len(ph)-1]
-		where += " AND c.status IN (" + ph + ")"
-		for _, s := range req.StatusKeys {
-			args = append(args, s)
-		}
-	}
-	if len(req.RequirementTypes) > 0 {
-		ph := strings.Repeat("?,", len(req.RequirementTypes))
-		ph = ph[:len(ph)-1]
-		where += " AND c.requirement_type IN (" + ph + ")"
-		for _, rt := range req.RequirementTypes {
-			args = append(args, rt)
-		}
-	}
-	if len(req.TeamIDs) > 0 {
-		ph := strings.Repeat("?,", len(req.TeamIDs))
-		ph = ph[:len(ph)-1]
-		where += " AND c.team_id IN (" + ph + ")"
-		for _, id := range req.TeamIDs {
-			args = append(args, id)
-		}
-	}
-	if len(req.AuditorIDs) > 0 {
-		ph := strings.Repeat("?,", len(req.AuditorIDs))
-		ph = ph[:len(ph)-1]
-		where += " AND c.auditor_id IN (" + ph + ")"
-		for _, id := range req.AuditorIDs {
-			args = append(args, id)
-		}
-	}
-	if len(req.OwnerIDs) > 0 {
-		ph := strings.Repeat("?,", len(req.OwnerIDs))
-		ph = ph[:len(ph)-1]
-		where += " AND c.owner_id IN (" + ph + ")"
-		for _, id := range req.OwnerIDs {
-			args = append(args, id)
-		}
-	}
-
-	var total int
-	if err := r.db.QueryRowContext(ctx,
-		"SELECT COUNT(*) "+controlFromClause+" "+where, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("control.Search count: %w", err)
-	}
-
-	dataArgs := append(append([]any{}, args...), req.Pagination.Limit, req.Pagination.Offset)
-	rows, err := r.db.QueryContext(ctx,
-		"SELECT"+controlSelectCols+controlFromClause+" "+where+
-			" ORDER BY c.control_number LIMIT ? OFFSET ?",
-		dataArgs...)
-	if err != nil {
-		return nil, 0, fmt.Errorf("control.Search query: %w", err)
-	}
-	defer rows.Close()
-
-	var controls []domain.AuditControl
-	for rows.Next() {
-		c, err := scanControl(rows)
-		if err != nil {
-			return nil, 0, fmt.Errorf("control.Search scan: %w", err)
-		}
-		controls = append(controls, *c)
-	}
-	return controls, total, rows.Err()
+	where, args := buildControlFilters("WHERE c.audit_id = ?", []any{auditID}, req)
+	return r.runControlSearch(ctx, where, args, req, "control.Search")
 }
 
 func (r *controlRepo) SearchControlsGlobal(ctx context.Context, req domain.SearchControlsRequest) ([]domain.AuditControl, int, error) {
-	args := []any{}
-	where := "WHERE 1=1"
+	where, args := buildControlFilters("WHERE 1=1", []any{}, req)
+	return r.runControlSearch(ctx, where, args, req, "control.SearchGlobal")
+}
+
+// buildControlFilters appends the optional filter clauses from req onto seedWhere/seedArgs
+// and returns the combined WHERE clause and argument list.
+func buildControlFilters(seedWhere string, seedArgs []any, req domain.SearchControlsRequest) (string, []any) {
+	where := seedWhere
+	args := seedArgs
 
 	if req.SearchQuery != "" {
 		where += " AND (c.control_number LIKE ? OR c.description LIKE ?)"
-		p := "%" + req.SearchQuery + "%"
+		p := "%" + likeEscape(req.SearchQuery) + "%"
 		args = append(args, p, p)
 	}
 	if len(req.StatusKeys) > 0 {
 		ph := strings.Repeat("?,", len(req.StatusKeys))
-		ph = ph[:len(ph)-1]
-		where += " AND c.status IN (" + ph + ")"
+		where += " AND c.status IN (" + ph[:len(ph)-1] + ")"
 		for _, s := range req.StatusKeys {
 			args = append(args, s)
 		}
 	}
 	if len(req.RequirementTypes) > 0 {
 		ph := strings.Repeat("?,", len(req.RequirementTypes))
-		ph = ph[:len(ph)-1]
-		where += " AND c.requirement_type IN (" + ph + ")"
+		where += " AND c.requirement_type IN (" + ph[:len(ph)-1] + ")"
 		for _, rt := range req.RequirementTypes {
 			args = append(args, rt)
 		}
 	}
 	if len(req.TeamIDs) > 0 {
 		ph := strings.Repeat("?,", len(req.TeamIDs))
-		ph = ph[:len(ph)-1]
-		where += " AND c.team_id IN (" + ph + ")"
+		where += " AND c.team_id IN (" + ph[:len(ph)-1] + ")"
 		for _, id := range req.TeamIDs {
 			args = append(args, id)
 		}
 	}
 	if len(req.AuditorIDs) > 0 {
 		ph := strings.Repeat("?,", len(req.AuditorIDs))
-		ph = ph[:len(ph)-1]
-		where += " AND c.auditor_id IN (" + ph + ")"
+		where += " AND c.auditor_id IN (" + ph[:len(ph)-1] + ")"
 		for _, id := range req.AuditorIDs {
 			args = append(args, id)
 		}
 	}
 	if len(req.OwnerIDs) > 0 {
 		ph := strings.Repeat("?,", len(req.OwnerIDs))
-		ph = ph[:len(ph)-1]
-		where += " AND c.owner_id IN (" + ph + ")"
+		where += " AND c.owner_id IN (" + ph[:len(ph)-1] + ")"
 		for _, id := range req.OwnerIDs {
 			args = append(args, id)
 		}
 	}
+	return where, args
+}
 
+// runControlSearch executes the count + paginated data query and scans the results.
+func (r *controlRepo) runControlSearch(ctx context.Context, where string, args []any, req domain.SearchControlsRequest, errPrefix string) ([]domain.AuditControl, int, error) {
 	var total int
 	if err := r.db.QueryRowContext(ctx,
 		"SELECT COUNT(*) "+controlFromClause+" "+where, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("control.SearchGlobal count: %w", err)
+		return nil, 0, fmt.Errorf("%s count: %w", errPrefix, err)
 	}
 
 	dataArgs := append(append([]any{}, args...), req.Pagination.Limit, req.Pagination.Offset)
@@ -237,7 +172,7 @@ func (r *controlRepo) SearchControlsGlobal(ctx context.Context, req domain.Searc
 			" ORDER BY c.control_number LIMIT ? OFFSET ?",
 		dataArgs...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("control.SearchGlobal query: %w", err)
+		return nil, 0, fmt.Errorf("%s query: %w", errPrefix, err)
 	}
 	defer rows.Close()
 
@@ -245,7 +180,7 @@ func (r *controlRepo) SearchControlsGlobal(ctx context.Context, req domain.Searc
 	for rows.Next() {
 		c, err := scanControl(rows)
 		if err != nil {
-			return nil, 0, fmt.Errorf("control.SearchGlobal scan: %w", err)
+			return nil, 0, fmt.Errorf("%s scan: %w", errPrefix, err)
 		}
 		controls = append(controls, *c)
 	}
@@ -257,7 +192,7 @@ func (r *controlRepo) GetControlByID(ctx context.Context, auditID, controlID int
 		"SELECT"+controlSelectCols+controlFromClause+" WHERE c.audit_id = ? AND c.id = ?",
 		auditID, controlID)
 	c, err := scanControl(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("control %d not found in audit %d", controlID, auditID)}
 	}
 	if err != nil {
@@ -376,13 +311,31 @@ func (r *controlRepo) BulkCreateControls(ctx context.Context, auditID int, reqs 
 		return nil, fmt.Errorf("control.BulkCreate commit: %w", err)
 	}
 
-	var controls []domain.AuditControl
+	ph := strings.Repeat("?,", len(ids))
+	inArgs := []any{auditID}
 	for _, id := range ids {
-		c, err := r.GetControlByID(ctx, auditID, id)
+		inArgs = append(inArgs, id)
+	}
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT"+controlSelectCols+controlFromClause+
+			" WHERE c.audit_id = ? AND c.id IN ("+ph[:len(ph)-1]+")"+
+			" ORDER BY c.control_number",
+		inArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("control.BulkCreate fetch: %w", err)
+	}
+	defer rows.Close()
+
+	var controls []domain.AuditControl
+	for rows.Next() {
+		c, err := scanControl(rows)
 		if err != nil {
-			return nil, fmt.Errorf("control.BulkCreate fetch %d: %w", id, err)
+			return nil, fmt.Errorf("control.BulkCreate fetch scan: %w", err)
 		}
 		controls = append(controls, *c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("control.BulkCreate fetch rows: %w", err)
 	}
 	return controls, nil
 }
@@ -454,8 +407,8 @@ func (r *controlRepo) UpdateControl(ctx context.Context, auditID, controlID int,
 			if err != nil {
 				return nil, err // propagates NotFoundError if record was deleted
 			}
-			if current.Status == req.ExpectedStatus {
-				return current, nil // MySQL no-op: value unchanged, not a conflict
+			if current.Status == req.ExpectedStatus && (req.Status == nil || *req.Status == req.ExpectedStatus) {
+				return current, nil // MySQL no-op: status not being changed, or being set to its current value
 			}
 			return nil, &apierror.ConflictError{Msg: "control was modified concurrently, please retry"}
 		}
@@ -513,7 +466,7 @@ func scanControl(s scanner) (*domain.AuditControl, error) {
 // When framework_control_id is set these are NULL (resolved via COALESCE on read).
 type controlDefCols struct {
 	controlNumber, description, requirementType, controlType, scope sql.NullString
-	evidenceReq                                                      sql.NullString
+	evidenceReq                                                     sql.NullString
 }
 
 // controlDefinitionCols returns the definition column values for an INSERT.

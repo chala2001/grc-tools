@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -65,7 +66,7 @@ func (r *riskRepo) SearchRisks(ctx context.Context, req domain.SearchRisksReques
 
 	if req.SearchQuery != "" {
 		where += " AND (r.risk_code LIKE ? OR r.risk_title LIKE ?)"
-		p := "%" + req.SearchQuery + "%"
+		p := "%" + likeEscape(req.SearchQuery) + "%"
 		args = append(args, p, p)
 	}
 	if len(req.WorkflowStatusKeys) > 0 {
@@ -138,7 +139,7 @@ func (r *riskRepo) GetRiskByID(ctx context.Context, id int) (*domain.Risk, error
 	row := r.db.QueryRowContext(ctx,
 		"SELECT"+riskSelectCols+riskFromClause+" WHERE r.id = ?", id)
 	risk, err := scanRisk(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("risk %d not found", id)}
 	}
 	if err != nil {

@@ -62,8 +62,10 @@ func (h *RiskChangeLogHandler) ListRiskChangeLog(w http.ResponseWriter, r *http.
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "riskId must be a positive integer"})
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, offset, ok := parsePagination(w, r)
+	if !ok {
+		return
+	}
 	resp, err := h.svc.ListRiskChangeLog(r.Context(), riskID, limit, offset)
 	if err != nil {
 		writeServiceError(w, r, err)

@@ -25,14 +25,20 @@ import (
 	"strings"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
+	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/domain"
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/storage"
 )
 
-// validBlobPath enforces the allowed Azure Blob layout so callers cannot
-// address arbitrary paths outside the audits/{id}/controls/{id}/evidence/ tree.
-var validBlobPath = regexp.MustCompile(`^audits/\d+/controls/\d+/evidence/`)
+// validBlobPath enforces the allowed Azure Blob layout. The pattern is fully
+// anchored (^ … $) and restricts each segment to a safe character set so that
+// dot-dot sequences, query separators (#, ?), and percent-signs cannot appear.
+// Dot-dot is additionally rejected explicitly because the character set allows
+// individual dots: "report..final.pdf" is fine; ".." as a traversal segment is not.
+var validBlobPath = regexp.MustCompile(`^audits/\d+/controls/\d+/evidence/[A-Za-z0-9._ -]+(/[A-Za-z0-9._ -]+)*$`)
 
-func guardBlobPath(path string) bool { return validBlobPath.MatchString(path) }
+func guardBlobPath(path string) bool {
+	return !strings.Contains(path, "..") && validBlobPath.MatchString(path)
+}
 
 // maxFileUploadBytes caps a single proxied file upload; the GRC Backend already
 // validates size/type before forwarding, this is a defensive backstop.
@@ -88,7 +94,7 @@ func (h *FileHandler) UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]any{"blobName": blobName, "size": len(data)})
+	_ = json.NewEncoder(w).Encode(domain.UploadFileResponse{BlobName: blobName, Size: len(data)})
 }
 
 // DownloadFile handles GET /files?path=<blobName> — streams the blob bytes back
@@ -134,18 +140,18 @@ func (h *FileHandler) ListFiles(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err)
 		return
 	}
-	out := make([]map[string]any, 0, len(items))
+	out := make([]domain.BlobFileItem, 0, len(items))
 	for _, it := range items {
-		out = append(out, map[string]any{
-			"name":        it.Name,
-			"fileName":    it.FileName(),
-			"contentType": it.ContentType,
-			"size":        it.Size,
+		out = append(out, domain.BlobFileItem{
+			Name:        it.Name,
+			FileName:    it.FileName(),
+			ContentType: it.ContentType,
+			Size:        it.Size,
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{"files": out})
+	_ = json.NewEncoder(w).Encode(domain.ListFilesResponse{Files: out})
 }
 
 // DeleteFile handles DELETE /files?path=<blobName>.

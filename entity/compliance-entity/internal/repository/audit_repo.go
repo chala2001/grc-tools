@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -63,7 +64,7 @@ func (r *auditRepo) SearchAudits(ctx context.Context, req domain.SearchAuditsReq
 
 	if req.SearchQuery != "" {
 		where += " AND a.name LIKE ?"
-		args = append(args, "%"+req.SearchQuery+"%")
+		args = append(args, "%"+likeEscape(req.SearchQuery)+"%")
 	}
 	if len(req.StatusKeys) > 0 {
 		placeholders := strings.Repeat("?,", len(req.StatusKeys))
@@ -122,7 +123,7 @@ func (r *auditRepo) GetAuditByID(ctx context.Context, id int) (*domain.Audit, er
 	row := r.db.QueryRowContext(ctx,
 		"SELECT"+auditSelectCols+auditFromClause+" WHERE a.id = ?", id)
 	a, err := scanAudit(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("audit %d not found", id)}
 	}
 	if err != nil {

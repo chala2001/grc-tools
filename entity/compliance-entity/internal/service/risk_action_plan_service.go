@@ -43,7 +43,8 @@ func (s *riskActionPlanService) CreateRiskActionPlan(ctx context.Context, riskID
 	if riskID <= 0 {
 		return domain.RiskActionPlan{}, &apierror.ValidationError{Msg: "riskId must be a positive integer"}
 	}
-	if !validPlanTypes[strings.ToUpper(req.PlanType)] {
+	req.PlanType = strings.ToUpper(req.PlanType)
+	if !validPlanTypes[req.PlanType] {
 		return domain.RiskActionPlan{}, &apierror.ValidationError{Msg: "planType must be STANDARD or MANAGEMENT"}
 	}
 	if req.CreatedBy == "" {
@@ -74,8 +75,12 @@ func (s *riskActionPlanService) UpdateRiskActionPlan(ctx context.Context, planID
 	if req.UpdatedBy == "" {
 		return domain.RiskActionPlan{}, &apierror.ValidationError{Msg: "updatedBy is required"}
 	}
-	if req.Status != nil && !validActionPlanStatuses[strings.ToUpper(*req.Status)] {
-		return domain.RiskActionPlan{}, &apierror.ValidationError{Msg: "status must be PENDING, IN_PROGRESS, or COMPLETED"}
+	if req.Status != nil {
+		up := strings.ToUpper(*req.Status)
+		if !validActionPlanStatuses[up] {
+			return domain.RiskActionPlan{}, &apierror.ValidationError{Msg: "status must be PENDING, IN_PROGRESS, or COMPLETED"}
+		}
+		req.Status = &up
 	}
 	p, err := s.repo.UpdateRiskActionPlan(ctx, planID, req)
 	if err != nil {

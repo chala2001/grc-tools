@@ -60,8 +60,10 @@ func (h *TrailHandler) ListTrail(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, &apierror.ValidationError{Msg: "auditId must be a positive integer"})
 		return
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, offset, ok := parsePagination(w, r)
+	if !ok {
+		return
+	}
 	resp, err := h.svc.ListTrail(r.Context(), auditID, limit, offset)
 	if err != nil {
 		writeServiceError(w, r, err)

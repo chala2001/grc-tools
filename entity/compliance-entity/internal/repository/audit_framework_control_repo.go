@@ -135,6 +135,19 @@ func (r *frameworkControlRepo) NewVersion(ctx context.Context, id int, req domai
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Supersede old row first, guarded by is_current = TRUE.
+	// Two concurrent NewVersion calls on the same id will both attempt this UPDATE;
+	// only one can match (RowsAffected = 1), the other gets 0 → ConflictError,
+	// preventing duplicate is_current rows.
+	supResult, err := tx.ExecContext(ctx,
+		"UPDATE audit_framework_control SET is_current = FALSE WHERE id = ? AND is_current = TRUE", id)
+	if err != nil {
+		return nil, fmt.Errorf("framework_control.NewVersion: supersede old: %w", err)
+	}
+	if n, _ := supResult.RowsAffected(); n == 0 {
+		return nil, &apierror.ConflictError{Msg: "framework control was already versioned concurrently, please retry"}
+	}
+
 	// Insert new version row.
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO audit_framework_control
@@ -148,12 +161,6 @@ func (r *frameworkControlRepo) NewVersion(ctx context.Context, id int, req domai
 		return nil, fmt.Errorf("framework_control.NewVersion: insert: %w", err)
 	}
 	newID, _ := res.LastInsertId()
-
-	// Mark old row as superseded.
-	if _, err = tx.ExecContext(ctx,
-		"UPDATE audit_framework_control SET is_current = FALSE WHERE id = ?", id); err != nil {
-		return nil, fmt.Errorf("framework_control.NewVersion: supersede old: %w", err)
-	}
 
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("framework_control.NewVersion: commit: %w", err)

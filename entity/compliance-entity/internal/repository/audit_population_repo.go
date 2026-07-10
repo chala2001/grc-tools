@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -45,7 +46,7 @@ func NewPopulationRepository(db *sql.DB) PopulationRepository { return &populati
 func (r *populationRepo) CreatePopulation(ctx context.Context, auditID, controlID int, req domain.CreatePopulationRequest) (*domain.AuditPopulation, error) {
 	var exists int
 	if err := r.db.QueryRowContext(ctx,
-		"SELECT 1 FROM audit_control WHERE id = ? AND audit_id = ?", controlID, auditID).Scan(&exists); err == sql.ErrNoRows {
+		"SELECT 1 FROM audit_control WHERE id = ? AND audit_id = ?", controlID, auditID).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("control %d not found in audit %d", controlID, auditID)}
 	} else if err != nil {
 		return nil, fmt.Errorf("population.Create parent check: %w", err)
@@ -71,7 +72,7 @@ func (r *populationRepo) GetPopulationByID(ctx context.Context, populationID int
 		`SELECT id, control_id, owner_id, team_id, reference_number, description,
 		        status, DATE_FORMAT(due_date,'%Y-%m-%d'), comments, created_at, updated_at
 		 FROM audit_population WHERE id = ?`, populationID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("population %d not found", populationID)}
 	}
 	if err != nil {
@@ -138,11 +139,33 @@ func (r *populationRepo) UpdatePopulation(ctx context.Context, populationID int,
 	}
 	sets = append(sets, "updated_by = ?")
 	args = append(args, req.UpdatedBy)
-	args = append(args, populationID)
 
-	if _, err := r.db.ExecContext(ctx,
-		"UPDATE audit_population SET "+strings.Join(sets, ", ")+" WHERE id = ?", args...); err != nil { // #nosec G202
+	var (
+		query  string
+		result sql.Result
+		err    error
+	)
+	if req.ExpectedStatus != "" {
+		args = append(args, populationID, req.ExpectedStatus)
+		query = "UPDATE audit_population SET " + strings.Join(sets, ", ") + " WHERE id = ? AND status = ?" // #nosec G202
+	} else {
+		args = append(args, populationID)
+		query = "UPDATE audit_population SET " + strings.Join(sets, ", ") + " WHERE id = ?" // #nosec G202
+	}
+	if result, err = r.db.ExecContext(ctx, query, args...); err != nil {
 		return nil, fmt.Errorf("population.Update(%d): %w", populationID, err)
+	}
+	if req.ExpectedStatus != "" {
+		if n, _ := result.RowsAffected(); n == 0 {
+			current, err := r.GetPopulationByID(ctx, populationID)
+			if err != nil {
+				return nil, err // propagates NotFoundError if record was deleted
+			}
+			if current.Status == req.ExpectedStatus && (req.Status == nil || *req.Status == req.ExpectedStatus) {
+				return current, nil // MySQL no-op: status not being changed, or being set to its current value
+			}
+			return nil, &apierror.ConflictError{Msg: "population was modified concurrently, please retry"}
+		}
 	}
 	return r.GetPopulationByID(ctx, populationID)
 }
@@ -151,7 +174,7 @@ func (r *populationRepo) AddPopulationFile(ctx context.Context, populationID int
 	// Verify the parent population exists so a bad id returns 404, not a raw FK 500.
 	var exists int
 	if err := r.db.QueryRowContext(ctx,
-		"SELECT 1 FROM audit_population WHERE id = ?", populationID).Scan(&exists); err == sql.ErrNoRows {
+		"SELECT 1 FROM audit_population WHERE id = ?", populationID).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("population %d not found", populationID)}
 	} else if err != nil {
 		return nil, fmt.Errorf("population_file.Add parent check: %w", err)

@@ -161,6 +161,9 @@ func (s *controlService) BulkCreateControls(ctx context.Context, auditID int, re
 		if c.ControlNumber == "" && c.FrameworkControlID == nil {
 			return domain.BulkCreateControlsResponse{}, &apierror.ValidationError{Msg: fmt.Sprintf("controls[%d]: controlNumber is required", i)}
 		}
+		if c.Description == "" && c.FrameworkControlID == nil {
+			return domain.BulkCreateControlsResponse{}, &apierror.ValidationError{Msg: fmt.Sprintf("controls[%d]: description is required", i)}
+		}
 		if !validRequirementTypes[strings.ToUpper(c.RequirementType)] {
 			return domain.BulkCreateControlsResponse{}, &apierror.ValidationError{Msg: fmt.Sprintf("controls[%d]: invalid requirementType %q", i, c.RequirementType)}
 		}
@@ -173,6 +176,9 @@ func (s *controlService) BulkCreateControls(ctx context.Context, auditID int, re
 		if c.CreatedBy == "" {
 			return domain.BulkCreateControlsResponse{}, &apierror.ValidationError{Msg: fmt.Sprintf("controls[%d]: createdBy is required", i)}
 		}
+		req.Controls[i].RequirementType = strings.ToUpper(c.RequirementType)
+		req.Controls[i].ControlType = strings.ToUpper(c.ControlType)
+		req.Controls[i].Scope = strings.ToUpper(c.Scope)
 	}
 	controls, err := s.repo.BulkCreateControls(ctx, auditID, req.Controls)
 	if err != nil {
@@ -227,6 +233,9 @@ func (s *controlService) CreateControl(ctx context.Context, auditID int, req dom
 	if req.CreatedBy == "" {
 		return domain.AuditControl{}, &apierror.ValidationError{Msg: "createdBy is required"}
 	}
+	req.RequirementType = strings.ToUpper(req.RequirementType)
+	req.ControlType = strings.ToUpper(req.ControlType)
+	req.Scope = strings.ToUpper(req.Scope)
 	c, err := s.repo.CreateControl(ctx, auditID, req)
 	if err != nil {
 		return domain.AuditControl{}, err

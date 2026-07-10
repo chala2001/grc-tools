@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -48,6 +49,9 @@ func (r *riskActionStepRepo) CreateRiskActionStep(ctx context.Context, planID in
 		 VALUES (?, ?, ?, 'PENDING', ?, ?)`,
 		planID, req.StepNo, nullableString(req.Description), req.CreatedBy, req.CreatedBy)
 	if err != nil {
+		if isFKViolation(err) {
+			return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("action plan %d not found", planID)}
+		}
 		return nil, fmt.Errorf("risk_action_step.Create: %w", err)
 	}
 	id, _ := res.LastInsertId()
@@ -59,7 +63,7 @@ func (r *riskActionStepRepo) GetRiskActionStepByID(ctx context.Context, planID, 
 		`SELECT id, plan_id, step_no, description, status,
 		        DATE_FORMAT(completed_date,'%Y-%m-%d'), created_at, updated_at
 		 FROM risk_action_step WHERE id = ? AND plan_id = ?`, stepID, planID))
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apierror.NotFoundError{Msg: fmt.Sprintf("action step %d not found", stepID)}
 	}
 	if err != nil {

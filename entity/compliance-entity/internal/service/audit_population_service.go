@@ -18,6 +18,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/apierror"
@@ -42,6 +43,34 @@ var validPopulationStatuses = map[string]bool{
 	"COMPLIANCE_REJECTED": true,
 	"APPROVED":            true,
 	"AUDITOR_REJECTED":    true,
+}
+
+// allowedPopulationTransitions defines legal next statuses for an audit_population
+// record, mirroring the review workflow: submit → compliance review → auditor
+// validation, with rejections looping back to SUBMITTED for resubmission.
+var allowedPopulationTransitions = map[string][]string{
+	"PENDING":             {"SUBMITTED"},
+	"SUBMITTED":           {"COMPLIANCE_APPROVED", "COMPLIANCE_REJECTED"},
+	"COMPLIANCE_REJECTED": {"SUBMITTED"},
+	"COMPLIANCE_APPROVED": {"APPROVED", "AUDITOR_REJECTED"},
+	"AUDITOR_REJECTED":    {"SUBMITTED"},
+	"APPROVED":            {},
+}
+
+// isValidPopulationTransition reports whether moving from → to is a legal step.
+// A no-op (from == to) and an empty current status are always allowed.
+func isValidPopulationTransition(from, to string) bool {
+	from = strings.ToUpper(from)
+	to = strings.ToUpper(to)
+	if from == to || from == "" {
+		return true
+	}
+	for _, next := range allowedPopulationTransitions[from] {
+		if next == to {
+			return true
+		}
+	}
+	return false
 }
 
 // validPopulationFileKinds mirrors the audit_evidence_file.file_kind ENUM.
@@ -102,8 +131,22 @@ func (s *populationService) UpdatePopulation(ctx context.Context, populationID i
 	if req.UpdatedBy == "" {
 		return domain.AuditPopulation{}, &apierror.ValidationError{Msg: "updatedBy is required"}
 	}
-	if req.Status != nil && !validPopulationStatuses[strings.ToUpper(*req.Status)] {
-		return domain.AuditPopulation{}, &apierror.ValidationError{Msg: "invalid status: " + *req.Status}
+	if req.Status != nil {
+		up := strings.ToUpper(*req.Status)
+		if !validPopulationStatuses[up] {
+			return domain.AuditPopulation{}, &apierror.ValidationError{Msg: "invalid status: " + *req.Status}
+		}
+		req.Status = &up
+		current, err := s.repo.GetPopulationByID(ctx, populationID)
+		if err != nil {
+			return domain.AuditPopulation{}, err
+		}
+		if !isValidPopulationTransition(current.Status, up) {
+			return domain.AuditPopulation{}, &apierror.ValidationError{
+				Msg: fmt.Sprintf("invalid status transition: %s -> %s", current.Status, up),
+			}
+		}
+		req.ExpectedStatus = current.Status
 	}
 	p, err := s.repo.UpdatePopulation(ctx, populationID, req)
 	if err != nil {

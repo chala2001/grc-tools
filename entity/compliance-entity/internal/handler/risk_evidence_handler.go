@@ -71,7 +71,7 @@ func (h *RiskEvidenceHandler) ListRiskEvidence(w http.ResponseWriter, r *http.Re
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// DeleteRiskEvidence handles DELETE /risks/evidence/{fileId}.
+// DeleteRiskEvidence handles DELETE /risk-evidence/{fileId}.
 func (h *RiskEvidenceHandler) DeleteRiskEvidence(w http.ResponseWriter, r *http.Request) {
 	fileID, err := strconv.Atoi(r.PathValue("fileId"))
 	if err != nil {

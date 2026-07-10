@@ -2091,6 +2091,276 @@ paths:
                 $ref: '#/components/schemas/ListRiskAssessmentsResponse'
         '400': *id001
         '500': *id002
+  /files:
+    post:
+      tags:
+      - Files
+      summary: Upload a file to Azure Blob Storage
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+              - blobName
+              - file
+              properties:
+                blobName:
+                  type: string
+                  description: Destination blob path (must be within audits/{id}/controls/{id}/evidence/)
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlobUploadResponse'
+        '400': *id001
+        '413':
+          description: File too large (max 25 MiB)
+        '500': *id002
+    get:
+      tags:
+      - Files
+      summary: Download a file from Azure Blob Storage
+      operationId: downloadFile
+      parameters:
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Blob path (must be within audits/{id}/controls/{id}/evidence/)
+      responses:
+        '200':
+          description: File bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400': *id001
+        '404': *id003
+        '500': *id002
+    delete:
+      tags:
+      - Files
+      summary: Delete a file from Azure Blob Storage
+      operationId: deleteFile
+      parameters:
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Blob path (must be within audits/{id}/controls/{id}/evidence/)
+      responses:
+        '204':
+          description: File deleted
+        '400': *id001
+        '404': *id003
+        '500': *id002
+  /files/list:
+    get:
+      tags:
+      - Files
+      summary: List files in a blob folder
+      operationId: listFiles
+      parameters:
+      - name: prefix
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Folder prefix (must be within audits/{id}/controls/{id}/evidence/)
+      responses:
+        '200':
+          description: List of blobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlobListResponse'
+        '400': *id001
+        '500': *id002
+  /audit/frameworks/{id}/controls:
+    get:
+      tags:
+      - Audit Framework Controls
+      summary: List current controls for a framework
+      operationId: listFrameworkControls
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: List of current framework controls
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFrameworkControlsResponse'
+        '400': *id001
+        '404': *id003
+        '500': *id002
+    post:
+      tags:
+      - Audit Framework Controls
+      summary: Create a framework control
+      operationId: createFrameworkControl
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFrameworkControlRequest'
+      responses:
+        '201':
+          description: Framework control created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditFrameworkControl'
+        '400': *id001
+        '404': *id003
+        '500': *id002
+  /audit/frameworks/{id}/controls/{controlId}:
+    put:
+      tags:
+      - Audit Framework Controls
+      summary: Create a new version of a framework control
+      operationId: newFrameworkControlVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: controlId
+        in: path
+        required: true
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFrameworkControlRequest'
+      responses:
+        '200':
+          description: New version created; previous row marked superseded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditFrameworkControl'
+        '400': *id001
+        '404': *id003
+        '500': *id002
+  /audit/frameworks/{id}/controls/{controlNumber}/versions:
+    get:
+      tags:
+      - Audit Framework Controls
+      summary: List all versions of a framework control by control number
+      operationId: listFrameworkControlVersions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: controlNumber
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: All versions of the control, newest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFrameworkControlsResponse'
+        '400': *id001
+        '404': *id003
+        '500': *id002
+  /controls/assigned-for-evidence:
+    get:
+      tags:
+      - Audit Controls
+      summary: List controls assigned to the authenticated user's team for evidence submission
+      operationId: listAssignedForEvidence
+      parameters:
+      - name: email
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Authenticated user's email (used to scope to their team)
+      responses:
+        '200':
+          description: Controls the user must submit evidence for
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAssignedControlsResponse'
+        '400': *id001
+        '500': *id002
+  /evidence-files/{fileId}:
+    get:
+      tags:
+      - Audit Evidence
+      summary: Get a single evidence file by ID
+      operationId: getEvidenceFileById
+      parameters:
+      - name: fileId
+        in: path
+        required: true
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Evidence file record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEvidenceFile'
+        '400': *id001
+        '404': *id003
+        '500': *id002
+  /audit/dashboard:
+    post:
+      tags:
+      - Audit Dashboard
+      summary: Get audit dashboard data
+      operationId: getAuditDashboard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditDashboardRequest'
+      responses:
+        '200':
+          description: Dashboard data scoped to the caller's role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardData'
+        '400': *id001
+        '500': *id002
 components:
   parameters:
     IntId:
@@ -3354,3 +3624,258 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RiskAssessment'
+    BlobUploadResponse:
+      type: object
+      properties:
+        blobName:
+          type: string
+        size:
+          type: integer
+    BlobItem:
+      type: object
+      properties:
+        name:
+          type: string
+        fileName:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: integer
+    BlobListResponse:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlobItem'
+    AuditFrameworkControl:
+      type: object
+      properties:
+        id:
+          type: integer
+        frameworkId:
+          type: integer
+        controlNumber:
+          type: string
+        description:
+          type: string
+        evidenceRequirement:
+          type: string
+          nullable: true
+        requirementType:
+          type: string
+          enum:
+          - DESIGN
+          - OE
+        controlType:
+          type: string
+          enum:
+          - CONFIG
+          - NON_CONFIG
+        scope:
+          type: string
+          enum:
+          - COMMON
+          - PRODUCT_SPECIFIC
+        version:
+          type: integer
+        isCurrent:
+          type: boolean
+        createdOn:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          nullable: true
+    ListFrameworkControlsResponse:
+      type: object
+      properties:
+        controls:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditFrameworkControl'
+        total:
+          type: integer
+    CreateFrameworkControlRequest:
+      type: object
+      required:
+      - controlNumber
+      - description
+      - requirementType
+      - controlType
+      - scope
+      - createdBy
+      properties:
+        controlNumber:
+          type: string
+        description:
+          type: string
+        evidenceRequirement:
+          type: string
+          nullable: true
+        requirementType:
+          type: string
+          enum:
+          - DESIGN
+          - OE
+        controlType:
+          type: string
+          enum:
+          - CONFIG
+          - NON_CONFIG
+        scope:
+          type: string
+          enum:
+          - COMMON
+          - PRODUCT_SPECIFIC
+        createdBy:
+          type: string
+    UpdateFrameworkControlRequest:
+      type: object
+      required:
+      - updatedBy
+      properties:
+        description:
+          type: string
+          nullable: true
+        evidenceRequirement:
+          type: string
+          nullable: true
+        requirementType:
+          type: string
+          nullable: true
+          enum:
+          - DESIGN
+          - OE
+        controlType:
+          type: string
+          nullable: true
+          enum:
+          - CONFIG
+          - NON_CONFIG
+        scope:
+          type: string
+          nullable: true
+          enum:
+          - COMMON
+          - PRODUCT_SPECIFIC
+        updatedBy:
+          type: string
+    AssignedControlForEvidence:
+      type: object
+      properties:
+        auditId:
+          type: integer
+        auditName:
+          type: string
+        controlId:
+          type: integer
+        controlNumber:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        baseFolderPath:
+          type: string
+    ListAssignedControlsResponse:
+      type: object
+      properties:
+        controls:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssignedControlForEvidence'
+    AuditDashboardRequest:
+      type: object
+      required:
+      - roles
+      - userEmail
+      properties:
+        roles:
+          type: array
+          items:
+            type: string
+        userEmail:
+          type: string
+    AuditStats:
+      type: object
+      properties:
+        totalAudits:
+          type: integer
+        activeAudits:
+          type: integer
+        completedAudits:
+          type: integer
+        archivedAudits:
+          type: integer
+    DashboardStats:
+      type: object
+      properties:
+        totalControls:
+          type: integer
+        completedControls:
+          type: integer
+        overdueControls:
+          type: integer
+        evidenceRequiredControls:
+          type: integer
+        completionPercent:
+          type: number
+          format: double
+    StatusCount:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+    TeamCompletion:
+      type: object
+      properties:
+        team:
+          type: string
+        completed:
+          type: integer
+        total:
+          type: integer
+    DashboardControlItem:
+      type: object
+      properties:
+        controlId:
+          type: integer
+        auditId:
+          type: integer
+        auditName:
+          type: string
+        controlNumber:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        dueDate:
+          type: string
+    DashboardData:
+      type: object
+      properties:
+        auditStats:
+          $ref: '#/components/schemas/AuditStats'
+        stats:
+          $ref: '#/components/schemas/DashboardStats'
+        statusDistribution:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusCount'
+        teamCompletion:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamCompletion'
+        actionItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardControlItem'
+        overdueControls:
+          type: array
+          items:
+            $ref: '#/components/schemas/DashboardControlItem'

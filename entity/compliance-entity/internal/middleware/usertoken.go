@@ -24,10 +24,17 @@ import (
 // userIDTokenKey is the context key for the x-user-id-token header value.
 type userIDTokenKey struct{}
 
-// UserIDToken captures the x-user-id-token header (forwarded by the GRC backend,
-// which has already validated the Asgardeo JWT) into the request context so
-// service implementations can attribute writes to a verified identity instead of
-// trusting a caller-supplied created_by field.
+// UserIDToken captures the x-user-id-token header into the request context.
+//
+// Attribution model: the GRC Backend validates the Asgardeo JWT, extracts the
+// user's email from the claims, and supplies it as createdBy/updatedBy in the
+// JSON body of every entity call. The entity trusts that value — the backend is
+// a trusted internal caller, not a public client. All handler code should read
+// actor identity from the decoded request struct, not from this context value.
+//
+// This header is forwarded by the Choreo gateway when present; it carries the
+// raw ID token string (not a user identifier), so it must never be stored
+// directly in a created_by/updated_by column.
 func UserIDToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if token := r.Header.Get("x-user-id-token"); token != "" {

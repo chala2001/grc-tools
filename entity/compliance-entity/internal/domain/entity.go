@@ -152,6 +152,11 @@ type ListFrameworkControlsResponse struct {
 	Total    int                     `json:"total"`
 }
 
+// ListFrameworkControlVersionsResponse is returned by GET /audit/frameworks/{id}/controls/{controlNumber}/versions.
+type ListFrameworkControlVersionsResponse struct {
+	Versions []AuditFrameworkControl `json:"versions"`
+}
+
 // CreateFrameworkControlRequest is the payload for POST /audit/frameworks/{id}/controls.
 type CreateFrameworkControlRequest struct {
 	ControlNumber       string  `json:"controlNumber"`
@@ -253,8 +258,8 @@ type SearchAuditsResponse struct {
 type AuditControl struct {
 	ID                  int       `json:"id"`
 	AuditID             int       `json:"auditId"`
-	FrameworkControlID  *int      `json:"frameworkControlId"`  // non-nil when sourced from template
-	TemplateVersion     *int      `json:"templateVersion"`     // version of the template row used
+	FrameworkControlID  *int      `json:"frameworkControlId"` // non-nil when sourced from template
+	TemplateVersion     *int      `json:"templateVersion"`    // version of the template row used
 	ControlNumber       string    `json:"controlNumber"`
 	Description         string    `json:"description"`
 	EvidenceRequirement *string   `json:"evidenceRequirement"`
@@ -456,6 +461,7 @@ type SearchRisksResponse struct {
 // Write request types — User
 // =============================================================================
 
+// CreateUserRequest is the payload for POST /users.
 type CreateUserRequest struct {
 	Email       string `json:"email"`
 	DisplayName string `json:"displayName"`
@@ -465,6 +471,7 @@ type CreateUserRequest struct {
 	CreatedBy   string `json:"createdBy"`
 }
 
+// UpdateUserRequest is the payload for PATCH /users/{id}.
 type UpdateUserRequest struct {
 	DisplayName *string `json:"displayName"`
 	AuditTeamID *int    `json:"auditTeamId"`
@@ -477,12 +484,14 @@ type UpdateUserRequest struct {
 // Write request types — Audit Team
 // =============================================================================
 
+// CreateAuditTeamRequest is the payload for POST /audit/teams.
 type CreateAuditTeamRequest struct {
 	Name      string `json:"name"`
 	Status    string `json:"status"`
 	CreatedBy string `json:"createdBy"`
 }
 
+// UpdateAuditTeamRequest is the payload for PATCH /audit/teams/{id}.
 type UpdateAuditTeamRequest struct {
 	Name      *string `json:"name"`
 	Status    *string `json:"status"`
@@ -493,12 +502,14 @@ type UpdateAuditTeamRequest struct {
 // Write request types — Audit Framework
 // =============================================================================
 
+// CreateAuditFrameworkRequest is the payload for POST /audit/frameworks.
 type CreateAuditFrameworkRequest struct {
 	Name      string `json:"name"`
 	Status    string `json:"status"`
 	CreatedBy string `json:"createdBy"`
 }
 
+// UpdateAuditFrameworkRequest is the payload for PATCH /audit/frameworks/{id}.
 type UpdateAuditFrameworkRequest struct {
 	Name      *string `json:"name"`
 	Status    *string `json:"status"`
@@ -509,12 +520,14 @@ type UpdateAuditFrameworkRequest struct {
 // Write request types — Audit Product
 // =============================================================================
 
+// CreateAuditProductRequest is the payload for POST /audit/products.
 type CreateAuditProductRequest struct {
 	Name      string `json:"name"`
 	Status    string `json:"status"`
 	CreatedBy string `json:"createdBy"`
 }
 
+// UpdateAuditProductRequest is the payload for PATCH /audit/products/{id}.
 type UpdateAuditProductRequest struct {
 	Name      *string `json:"name"`
 	Status    *string `json:"status"`
@@ -525,6 +538,7 @@ type UpdateAuditProductRequest struct {
 // Write request types — Audit
 // =============================================================================
 
+// CreateAuditRequest is the payload for POST /audits.
 type CreateAuditRequest struct {
 	Name             string  `json:"name"`
 	FrameworkID      int     `json:"frameworkId"`
@@ -535,6 +549,7 @@ type CreateAuditRequest struct {
 	CreatedBy        string  `json:"createdBy"`
 }
 
+// UpdateAuditRequest is the payload for PATCH /audits/{id}.
 type UpdateAuditRequest struct {
 	Name             *string `json:"name"`
 	Status           *string `json:"status"`
@@ -559,11 +574,12 @@ type InlinePopulationRequest struct {
 	TeamID          *int    `json:"teamId"`
 }
 
+// CreateControlRequest is the payload for POST /audits/{auditId}/controls.
 type CreateControlRequest struct {
 	// When FrameworkControlID is set the definition columns below may be omitted;
 	// they will be resolved from the template via COALESCE on read.
 	FrameworkControlID  *int                     `json:"frameworkControlId"`
-	ControlSource       string                   `json:"controlSource"`       // MANUAL | COPIED | CSV; defaults to MANUAL
+	ControlSource       string                   `json:"controlSource"` // MANUAL | COPIED | CSV; defaults to MANUAL
 	ControlNumber       string                   `json:"controlNumber"`
 	Description         string                   `json:"description"`
 	EvidenceRequirement *string                  `json:"evidenceRequirement"`
@@ -573,11 +589,12 @@ type CreateControlRequest struct {
 	OwnerID             *int                     `json:"ownerId"`
 	TeamID              *int                     `json:"teamId"`
 	AuditorID           *int                     `json:"auditorId"`
-	DueDate             *string                  `json:"dueDate"` // YYYY-MM-DD
+	DueDate             *string                  `json:"dueDate"`    // YYYY-MM-DD
 	Population          *InlinePopulationRequest `json:"population"` // OE controls only
 	CreatedBy           string                   `json:"createdBy"`
 }
 
+// UpdateControlRequest is the payload for PATCH /audits/{auditId}/controls/{controlId}.
 type UpdateControlRequest struct {
 	OwnerID         *int    `json:"ownerId"`
 	TeamID          *int    `json:"teamId"`
@@ -607,6 +624,7 @@ type AuditEvidence struct {
 	UpdatedOn            time.Time `json:"updatedOn"`
 }
 
+// CreateEvidenceRequest is the payload for POST /audits/{auditId}/controls/{controlId}/evidence.
 type CreateEvidenceRequest struct {
 	SubmittedBy          *int    `json:"submittedBy"`
 	FolderPath           *string `json:"folderPath"`
@@ -614,6 +632,7 @@ type CreateEvidenceRequest struct {
 	CreatedBy            string  `json:"createdBy"`
 }
 
+// UpdateEvidenceRequest is the payload for PATCH /evidence/{evidenceId}.
 type UpdateEvidenceRequest struct {
 	Status         string `json:"status"` // SUBMITTED | COMPLIANCE_APPROVED | COMPLIANCE_REJECTED | APPROVED | AUDITOR_REJECTED
 	UpdatedBy      string `json:"updatedBy"`
@@ -634,6 +653,7 @@ type AuditEvidenceFile struct {
 	CreatedOn    time.Time `json:"createdOn"`
 }
 
+// CreateEvidenceFileRequest is the payload for POST /evidence/{evidenceId}/files.
 type CreateEvidenceFileRequest struct {
 	FileName   string  `json:"fileName"`
 	FilePath   string  `json:"filePath"` // Azure Blob URL
@@ -643,8 +663,32 @@ type CreateEvidenceFileRequest struct {
 	CreatedBy  string  `json:"createdBy"`
 }
 
+// ListEvidenceFilesResponse is returned by GET /evidence/{evidenceId}/files.
 type ListEvidenceFilesResponse struct {
 	Files []AuditEvidenceFile `json:"files"`
+}
+
+// =============================================================================
+// Blob file responses (POST /files, GET /files/list) — used by FileHandler
+// =============================================================================
+
+// UploadFileResponse is returned by POST /files.
+type UploadFileResponse struct {
+	BlobName string `json:"blobName"`
+	Size     int    `json:"size"`
+}
+
+// BlobFileItem describes one blob entry in a folder listing.
+type BlobFileItem struct {
+	Name        string `json:"name"`
+	FileName    string `json:"fileName"`
+	ContentType string `json:"contentType"`
+	Size        int64  `json:"size"`
+}
+
+// ListFilesResponse is returned by GET /files/list.
+type ListFilesResponse struct {
+	Files []BlobFileItem `json:"files"`
 }
 
 // ListEvidenceResponse is returned by GET /audits/{auditId}/controls/{controlId}/evidence.
@@ -671,6 +715,7 @@ type AuditPopulation struct {
 	UpdatedOn       time.Time `json:"updatedOn"`
 }
 
+// CreatePopulationRequest is the payload for POST /audits/{auditId}/controls/{controlId}/populations.
 type CreatePopulationRequest struct {
 	OwnerID         *int    `json:"ownerId"`
 	TeamID          *int    `json:"teamId"`
@@ -680,6 +725,7 @@ type CreatePopulationRequest struct {
 	CreatedBy       string  `json:"createdBy"`
 }
 
+// UpdatePopulationRequest is the payload for PATCH /populations/{populationId}.
 type UpdatePopulationRequest struct {
 	OwnerID         *int    `json:"ownerId"`
 	TeamID          *int    `json:"teamId"`
@@ -689,6 +735,7 @@ type UpdatePopulationRequest struct {
 	Description     *string `json:"description"`
 	DueDate         *string `json:"dueDate"`
 	UpdatedBy       string  `json:"updatedBy"`
+	ExpectedStatus  string  `json:"-"` // set server-side for atomic transition; never decoded from JSON
 }
 
 // CreatePopulationFileRequest attaches a file to a population record.
@@ -707,6 +754,7 @@ type CreatePopulationFileRequest struct {
 // Write request types — Risk Team
 // =============================================================================
 
+// CreateRiskTeamRequest is the payload for POST /risk/teams.
 type CreateRiskTeamRequest struct {
 	Name        string  `json:"name"`
 	Code        *string `json:"code"`
@@ -716,6 +764,7 @@ type CreateRiskTeamRequest struct {
 	CreatedBy   string  `json:"createdBy"`
 }
 
+// UpdateRiskTeamRequest is the payload for PATCH /risk/teams/{id}.
 type UpdateRiskTeamRequest struct {
 	Name        *string `json:"name"`
 	Code        *string `json:"code"`
@@ -729,12 +778,14 @@ type UpdateRiskTeamRequest struct {
 // Write request types — Risk Compliance Reference
 // =============================================================================
 
+// CreateRiskReferenceRequest is the payload for POST /risk/compliance-references.
 type CreateRiskReferenceRequest struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
 	CreatedBy   string  `json:"createdBy"`
 }
 
+// UpdateRiskReferenceRequest is the payload for PATCH /risk/compliance-references/{id}.
 type UpdateRiskReferenceRequest struct {
 	Name        *string `json:"name"`
 	Description *string `json:"description"`
@@ -745,6 +796,7 @@ type UpdateRiskReferenceRequest struct {
 // Write request types — Risk
 // =============================================================================
 
+// CreateRiskRequest is the payload for POST /risks.
 type CreateRiskRequest struct {
 	RiskTitle          string  `json:"riskTitle"`
 	RiskDescription    *string `json:"riskDescription"`
@@ -769,6 +821,7 @@ type CreateRiskRequest struct {
 	CreatedBy          string  `json:"createdBy"`
 }
 
+// UpdateRiskRequest is the payload for PATCH /risks/{id}.
 type UpdateRiskRequest struct {
 	RiskTitle              *string `json:"riskTitle"`
 	RiskDescription        *string `json:"riskDescription"`
@@ -807,6 +860,7 @@ type RiskActionPlan struct {
 	UpdatedOn     time.Time `json:"updatedOn"`
 }
 
+// CreateRiskActionPlanRequest is the payload for POST /risks/{riskId}/action-plans.
 type CreateRiskActionPlanRequest struct {
 	Description   *string `json:"description"`
 	ActionOwnerID *int    `json:"actionOwnerId"`
@@ -814,6 +868,7 @@ type CreateRiskActionPlanRequest struct {
 	CreatedBy     string  `json:"createdBy"`
 }
 
+// UpdateRiskActionPlanRequest is the payload for PATCH /action-plans/{planId}.
 type UpdateRiskActionPlanRequest struct {
 	Description   *string `json:"description"`
 	ActionOwnerID *int    `json:"actionOwnerId"`
@@ -822,6 +877,7 @@ type UpdateRiskActionPlanRequest struct {
 	UpdatedBy     string  `json:"updatedBy"`
 }
 
+// ListRiskActionPlansResponse is returned by GET /risks/{riskId}/action-plans.
 type ListRiskActionPlansResponse struct {
 	Plans []RiskActionPlan `json:"plans"`
 }
@@ -841,6 +897,7 @@ type RiskEvidenceFile struct {
 	CreatedOn    time.Time `json:"createdOn"`
 }
 
+// CreateRiskEvidenceRequest is the payload for POST /risks/{riskId}/evidence.
 type CreateRiskEvidenceRequest struct {
 	FileName     string  `json:"fileName"`
 	FilePath     string  `json:"filePath"`
@@ -849,6 +906,7 @@ type CreateRiskEvidenceRequest struct {
 	CreatedBy    string  `json:"createdBy"`
 }
 
+// ListRiskEvidenceResponse is returned by GET /risks/{riskId}/evidence.
 type ListRiskEvidenceResponse struct {
 	Evidence []RiskEvidenceFile `json:"evidence"`
 }
@@ -868,6 +926,7 @@ type RiskAssessment struct {
 	CreatedOn        time.Time `json:"createdOn"`
 }
 
+// CreateRiskAssessmentRequest is the payload for POST /risks/{riskId}/assessments.
 type CreateRiskAssessmentRequest struct {
 	ScoreID          int    `json:"scoreId"`
 	Progress         string `json:"progress"`
@@ -876,6 +935,7 @@ type CreateRiskAssessmentRequest struct {
 	CreatedBy        string `json:"createdBy"`
 }
 
+// ListRiskAssessmentsResponse is returned by GET /risks/{riskId}/assessments.
 type ListRiskAssessmentsResponse struct {
 	Assessments []RiskAssessment `json:"assessments"`
 }
@@ -891,12 +951,13 @@ type AuditTrail struct {
 	AuditID    *int      `json:"auditId"`
 	ControlID  *int      `json:"controlId"`
 	EvidenceID *int      `json:"evidenceId"`
-	Action     string    `json:"action"` // CREATED | UPLOADED | RESUBMITTED | APPROVED | REJECTED | COMMENTED | ESCALATED | AI_VALIDATED | EXPORTED
+	Action     string    `json:"action"`  // CREATED | UPLOADED | RESUBMITTED | APPROVED | REJECTED | COMMENTED | ESCALATED | AI_VALIDATED | EXPORTED
 	Details    *string   `json:"details"` // raw JSON string
 	CreatedBy  *string   `json:"createdBy"`
 	CreatedOn  time.Time `json:"createdOn"`
 }
 
+// CreateAuditTrailRequest is the payload for POST /audits/{auditId}/trail.
 type CreateAuditTrailRequest struct {
 	ActorID    *int    `json:"actorId"`
 	ControlID  *int    `json:"controlId"`
@@ -906,6 +967,7 @@ type CreateAuditTrailRequest struct {
 	CreatedBy  *string `json:"createdBy"`
 }
 
+// ListAuditTrailResponse is returned by GET /audits/{auditId}/trail.
 type ListAuditTrailResponse struct {
 	Trail  []AuditTrail `json:"trail"`
 	Total  int          `json:"total"`
@@ -929,12 +991,14 @@ type RiskActionStep struct {
 	UpdatedOn     time.Time `json:"updatedOn"`
 }
 
+// CreateRiskActionStepRequest is the payload for POST /action-plans/{planId}/steps.
 type CreateRiskActionStepRequest struct {
 	StepNo      int     `json:"stepNo"`
 	Description *string `json:"description"`
 	CreatedBy   string  `json:"createdBy"`
 }
 
+// UpdateRiskActionStepRequest is the payload for PATCH /action-plans/{planId}/steps/{stepId}.
 type UpdateRiskActionStepRequest struct {
 	Description   *string `json:"description"`
 	Status        *string `json:"status"`        // PENDING | IN_PROGRESS | COMPLETED
@@ -943,6 +1007,7 @@ type UpdateRiskActionStepRequest struct {
 	UpdatedBy     string  `json:"updatedBy"`
 }
 
+// ListRiskActionStepsResponse is returned by GET /action-plans/{planId}/steps.
 type ListRiskActionStepsResponse struct {
 	Steps []RiskActionStep `json:"steps"`
 }
@@ -961,11 +1026,12 @@ type RiskComplianceRefLink struct {
 	CreatedOn   time.Time `json:"createdOn"`
 }
 
+// AddRiskComplianceRefRequest is the payload for POST /risks/{riskId}/compliance-references.
 type AddRiskComplianceRefRequest struct {
-	ReferenceID int    `json:"referenceId"`
-	CreatedBy   string `json:"createdBy"`
+	ReferenceID int `json:"referenceId"`
 }
 
+// ListRiskComplianceRefsResponse is returned by GET /risks/{riskId}/compliance-references.
 type ListRiskComplianceRefsResponse struct {
 	References []RiskComplianceRefLink `json:"references"`
 }
@@ -990,6 +1056,7 @@ type RiskEscalation struct {
 	UpdatedOn            time.Time `json:"updatedOn"`
 }
 
+// CreateRiskEscalationRequest is the payload for POST /risks/{riskId}/escalations.
 type CreateRiskEscalationRequest struct {
 	EscalatedTo          int     `json:"escalatedTo"`
 	Reason               *string `json:"reason"`
@@ -998,6 +1065,7 @@ type CreateRiskEscalationRequest struct {
 	CreatedBy            string  `json:"createdBy"`
 }
 
+// UpdateRiskEscalationRequest is the payload for PATCH /risks/{riskId}/escalations/{escalationId}.
 type UpdateRiskEscalationRequest struct {
 	Decision             *string `json:"decision"`
 	NewTreatmentStrategy *string `json:"newTreatmentStrategy"`
@@ -1006,6 +1074,7 @@ type UpdateRiskEscalationRequest struct {
 	UpdatedBy            string  `json:"updatedBy"`
 }
 
+// ListRiskEscalationsResponse is returned by GET /risks/{riskId}/escalations.
 type ListRiskEscalationsResponse struct {
 	Escalations []RiskEscalation `json:"escalations"`
 }
@@ -1026,6 +1095,7 @@ type RiskChangeLog struct {
 	CreatedOn    time.Time `json:"createdOn"`
 }
 
+// CreateRiskChangeLogRequest is the payload for POST /risks/{riskId}/changes.
 type CreateRiskChangeLogRequest struct {
 	CreatedBy    string  `json:"createdBy"`
 	Action       string  `json:"action"` // CREATE | UPDATE | DELETE
@@ -1034,6 +1104,7 @@ type CreateRiskChangeLogRequest struct {
 	NewValue     *string `json:"newValue"` // raw JSON string
 }
 
+// ListRiskChangeLogResponse is returned by GET /risks/{riskId}/changes.
 type ListRiskChangeLogResponse struct {
 	Changes []RiskChangeLog `json:"changes"`
 	Total   int             `json:"total"`
@@ -1059,6 +1130,7 @@ type AuditComment struct {
 	UpdatedOn       time.Time `json:"updatedOn"`
 }
 
+// CreateAuditCommentRequest is the payload for POST /evidence/{evidenceId}/comments.
 type CreateAuditCommentRequest struct {
 	AuthorID        *int   `json:"authorId"`
 	ParentCommentID *int   `json:"parentCommentId"`
@@ -1067,6 +1139,7 @@ type CreateAuditCommentRequest struct {
 	CreatedBy       string `json:"createdBy"`
 }
 
+// ListAuditCommentsResponse is returned by GET /evidence/{evidenceId}/comments.
 type ListAuditCommentsResponse struct {
 	Comments []AuditComment `json:"comments"`
 }
@@ -1089,6 +1162,7 @@ type AuditAIValidationLog struct {
 	CreatedOn       time.Time `json:"createdOn"`
 }
 
+// CreateAuditAIValidationLogRequest is the payload for POST /evidence/{evidenceId}/ai-validations.
 type CreateAuditAIValidationLogRequest struct {
 	ControlID       int      `json:"controlId"`
 	Result          string   `json:"result"` // PASS | FAIL | UNCERTAIN
@@ -1098,6 +1172,7 @@ type CreateAuditAIValidationLogRequest struct {
 	CreatedBy       string   `json:"createdBy"`
 }
 
+// ListAuditAIValidationLogsResponse is returned by GET /evidence/{evidenceId}/ai-validations.
 type ListAuditAIValidationLogsResponse struct {
 	Validations []AuditAIValidationLog `json:"validations"`
 }
