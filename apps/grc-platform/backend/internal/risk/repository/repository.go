@@ -110,7 +110,7 @@ type AnalyticsRepository interface {
 	// TODO: add time-series trend queries for the Analytics page
 }
 
-// DashboardRepository provides the aggregated read queries behind GET /api/v1/dashboard.
+// DashboardRepository provides the aggregated read queries behind GET /api/v1/risks/dashboard.
 // All methods exclude CANCELLED risks; "open" means any status other than CLOSED.
 type DashboardRepository interface {
 	// StatusCounts returns total / open / closed risk counts.

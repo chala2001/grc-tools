@@ -76,7 +76,7 @@ func RegisterRoutes(mux *http.ServeMux, deps Deps) {
 	mux.HandleFunc("POST /api/v1/risks/{id}/assess", d.handleAssessRisk)
 
 	// Dashboard
-	mux.HandleFunc("GET /api/v1/dashboard", d.handleDashboard)
+	mux.HandleFunc("GET /api/v1/risks/dashboard", d.handleDashboard)
 
 	// TODO: remaining routes
 	// POST   /api/v1/risks/{id}/escalate  ← MEDIUM/HIGH past implementation_date escalation (deferred)
