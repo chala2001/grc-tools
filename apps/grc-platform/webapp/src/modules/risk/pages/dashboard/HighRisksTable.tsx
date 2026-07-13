@@ -26,7 +26,8 @@ import {
 } from "@wso2/oxygen-ui";
 import type { JSX } from "react";
 import type { HighRiskItem } from "../../api/riskApi";
-import { formatDate, formatTreatment } from "./constants";
+import { formatTreatment } from "./constants";
+import { formatDate } from "../risk-registers/utils";
 
 interface HighRisksTableProps {
   data: HighRiskItem[];

@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { parseDateStr } from "../risk-registers/utils";
+
 // Chart palette for the risk dashboard. Categorical hues are assigned in fixed
 // order (never cycled) and were validated for colorblind-safe adjacent-pair
 // separation. Segment labels stay visible because two hues sit below 3:1
@@ -43,7 +45,7 @@ export const CLOSED_COLOR = "#2a78d6";
 
 // Fixed-order categorical slots for compliance certifications, assigned to
 // cert names alphabetically. Certs beyond the 8 slots share the neutral color.
-export const CERT_PALETTE = [
+const CERT_PALETTE = [
   "#2a78d6",
   "#1baf7a",
   "#eda100",
@@ -53,7 +55,7 @@ export const CERT_PALETTE = [
   "#e87ba4",
   "#eb6834",
 ];
-export const CERT_OVERFLOW_COLOR = "#6b7280";
+const CERT_OVERFLOW_COLOR = "#6b7280";
 
 export const LEVEL_ORDER = ["HIGH", "MEDIUM", "LOW"] as const;
 
@@ -63,7 +65,9 @@ export const LEVEL_LABELS: Record<string, string> = {
   LOW: "Low",
 };
 
-// Fallbacks for when a payload row is missing its DB color_code.
+// Severity palette shared across the risk module: dashboard charts use it as
+// a fallback when a payload row is missing its DB color_code, and
+// EditRiskDialog uses it directly to color the live score preview.
 export const LEVEL_FALLBACK_COLORS: Record<string, string> = {
   HIGH: "#FF0000",
   MEDIUM: "#FF9900",
@@ -100,21 +104,11 @@ export function buildCertColorMap(certNames: string[]): Map<string, string> {
   return map;
 }
 
-// Backend dates are date-only values serialized as UTC midnight timestamps
-// (e.g. "2026-03-15T00:00:00Z"); rendering in the viewer's local zone would
-// shift the displayed day for anyone west of UTC, so we format in UTC.
-export function formatDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" });
-}
-
-export function formatMonthYear(value: string | null): string {
+function formatMonthYear(value: string | null): string {
   if (!value) return "";
-  const d = new Date(value);
+  const d = parseDateStr(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", timeZone: "UTC" });
+  return d.toLocaleDateString("en-US", { year: "numeric", month: "short" });
 }
 
 // Renders the treatment column shown in tables: "Accept", or

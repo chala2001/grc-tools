@@ -14,11 +14,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { Box, Typography } from "@wso2/oxygen-ui";
-import { Card, CardContent } from "@mui/material";
+import { Box, Card, CardContent, Typography } from "@wso2/oxygen-ui";
 import { AlertTriangle, CheckCircle, Clock, ClipboardList } from "@wso2/oxygen-ui-icons-react";
-import type { JSX } from "react";
-import type * as React from "react";
+import type { JSX, ReactNode } from "react";
 import type { RiskStatusSummary } from "../../api/riskApi";
 
 interface SummaryCardsProps {
@@ -29,7 +27,7 @@ interface StatTileProps {
   count: number;
   pct?: number | null;
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   iconColor: "primary" | "error" | "success" | "warning";
 }
 

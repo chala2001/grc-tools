@@ -50,6 +50,7 @@ import type {
   UserOption,
 } from "../../api/riskApi";
 import { TREATMENT_STRATEGIES } from "../add-risk/constants";
+import { LEVEL_FALLBACK_COLORS } from "../dashboard/constants";
 
 const { DatePicker, LocalizationProvider } = DatePickers;
 
@@ -73,12 +74,6 @@ function SectionLabel({ children, restricted }: { children: React.ReactNode; res
     </Box>
   );
 }
-
-const LEVEL_COLORS: Record<string, string> = {
-  LOW: "#00B050",
-  MEDIUM: "#FF9900",
-  HIGH: "#FF0000",
-};
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -553,7 +548,7 @@ export default function EditRiskDialog({
                     {grossScoreId && (() => {
                       const s = riskScores.find((sc) => sc.id === grossScoreId);
                       return s ? (
-                        <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: LEVEL_COLORS[s.risk_level] ?? "text.secondary" }}>
+                        <Typography variant="caption" sx={{ mt: 0.5, display: "block", color: LEVEL_FALLBACK_COLORS[s.risk_level] ?? "text.secondary" }}>
                           L{s.likelihood} × I{s.impact} = {s.risk_rating} ({s.risk_level})
                         </Typography>
                       ) : null;

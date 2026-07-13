@@ -37,12 +37,16 @@ export const STATUS_CONFIG: Record<string, StatusCfg> = {
   CLOSED:                         { label: "Closed",                       color: "default", sx: { bgcolor: "#388e3c", color: "#fff" } },
 };
 
-// Parses a date string as local time when it is a bare YYYY-MM-DD value.
-// new Date("YYYY-MM-DD") is UTC midnight and drifts one day in UTC- zones;
-// new Date(y, m-1, d) is always local midnight.
-function parseDateStr(s: string): Date {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    return new Date(Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10)));
+// Parses a date-only value as local time, whether it's a bare "YYYY-MM-DD"
+// or the backend's serialized UTC-midnight timestamp form
+// ("YYYY-MM-DDT00:00:00Z"). Reading the calendar digits directly and
+// constructing a local Date from them sidesteps new Date(s)'s UTC
+// interpretation, which otherwise drifts the displayed day back by one in
+// any timezone west of UTC.
+export function parseDateStr(s: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   }
   return new Date(s);
 }

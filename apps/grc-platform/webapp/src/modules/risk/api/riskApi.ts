@@ -485,7 +485,7 @@ export async function resubmitRisk(authFetch: AuthFetch, id: number): Promise<vo
 }
 
 export async function fetchDashboard(authFetch: AuthFetch): Promise<DashboardSummary> {
-  const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/dashboard`);
+  const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/risks/dashboard`);
   return handleResponse<DashboardSummary>(res);
 }
 

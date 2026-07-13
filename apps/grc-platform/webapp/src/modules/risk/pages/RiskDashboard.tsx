@@ -33,8 +33,8 @@ import {
 import DashboardView from "./dashboard/DashboardView";
 
 // Risk dashboard: current organisational risk posture built from a single
-// GET /api/v1/dashboard payload, plus the 3×3 risk_score matrix that colors
-// heatmap cells holding no risks.
+// GET /api/v1/risks/dashboard payload, plus the 3×3 risk_score matrix that
+// colors heatmap cells holding no risks.
 export default function RiskDashboard(): JSX.Element {
   const authFetch = useAuthApiClient();
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
@@ -59,9 +59,14 @@ export default function RiskDashboard(): JSX.Element {
     }
   }, [authFetch]);
 
+  // Run once on mount, not on every `load` identity change — matches
+  // RiskRegisters.tsx's initial-fetch effect. `load` depends on authFetch,
+  // whose stability isn't a documented @asgardeo/react guarantee, so gating
+  // on `load` risks a refetch loop if that internal detail ever changes.
   useEffect(() => {
     void load();
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Box sx={{ p: 3, display: "flex", flexDirection: "column", gap: 3 }}>
