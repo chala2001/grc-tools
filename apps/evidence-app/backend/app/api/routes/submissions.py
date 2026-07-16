@@ -13,7 +13,10 @@ VALID_STATUSES = {"pending", "approved", "rejected"}
 
 @router.get("", response_model=list[SubmissionResponse])
 def list_submissions(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return db.query(Submission).order_by(Submission.id.desc()).all()
+    q = db.query(Submission)
+    if user.role != "admin":
+        q = q.join(Evidence, Submission.evidence_id == Evidence.id).filter(Evidence.created_by == user.email)
+    return q.order_by(Submission.id.desc()).all()
 
 
 @router.post("", response_model=SubmissionResponse, status_code=201)
@@ -34,6 +37,10 @@ def get_submission(submission_id: int, db: Session = Depends(get_db), user: User
     submission = db.query(Submission).filter(Submission.id == submission_id).first()
     if not submission:
         raise HTTPException(status_code=404, detail="Submission not found")
+    if user.role != "admin":
+        evidence = db.query(Evidence).filter(Evidence.id == submission.evidence_id).first()
+        if not evidence or evidence.created_by != user.email:
+            raise HTTPException(status_code=403, detail="Not authorized to view this submission")
     return submission
 
 
