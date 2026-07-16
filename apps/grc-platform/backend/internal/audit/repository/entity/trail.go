@@ -14,19 +14,32 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package mysql
+package entity
 
 import (
-	"database/sql"
+	"context"
+	"fmt"
 
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/repository"
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/entityclient"
 )
 
-type assignmentRepository struct{ db *sql.DB }
+type trailRepo struct{ c *entityclient.Client }
 
-// NewAssignmentRepository creates a MySQL-backed repository.AssignmentRepository.
-func NewAssignmentRepository(db *sql.DB) repository.AssignmentRepository {
-	return &assignmentRepository{db: db}
+// NewTrailRepository returns an entity-backed TrailRepository.
+func NewTrailRepository(c *entityclient.Client) repository.TrailRepository {
+	return &trailRepo{c: c}
 }
 
-// TODO: implement audit_auditor_assignment CRUD
+func (r *trailRepo) Create(ctx context.Context, auditID int, controlID, evidenceID *int, action, details, createdBy string) error {
+	body := map[string]any{
+		"controlId":  controlID,
+		"evidenceId": evidenceID,
+		"action":     action,
+		"createdBy":  createdBy,
+	}
+	if details != "" {
+		body["details"] = details
+	}
+	return r.c.Post(ctx, fmt.Sprintf("/audits/%d/trail", auditID), body, nil)
+}

@@ -13,8 +13,6 @@
 --       user.risk_team_id  FK → added by risk_schema.sql  (after risk_team  exists)
 -- =============================================================================
 
-USE grc_platform_dev;
-
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- -----------------------------------------------------------------------------
@@ -28,6 +26,7 @@ CREATE TABLE IF NOT EXISTS `user` (
   id            INT          NOT NULL AUTO_INCREMENT,
   email         VARCHAR(255) NOT NULL,
   display_name  VARCHAR(255) NOT NULL,
+  user_type     ENUM('INTERNAL','EXTERNAL') NOT NULL DEFAULT 'INTERNAL',
   audit_team_id INT          NULL,
   risk_team_id  INT          NULL,
   status        ENUM('ACTIVE','INACTIVE','REMOVED') NOT NULL DEFAULT 'ACTIVE',

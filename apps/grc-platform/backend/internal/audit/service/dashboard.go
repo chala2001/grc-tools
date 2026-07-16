@@ -26,6 +26,7 @@ import (
 // DashboardService fetches role-scoped dashboard data.
 type DashboardService interface {
 	Get(ctx context.Context, f model.DashboardFilter) (*model.DashboardData, error)
+	GetWorkQueuePage(ctx context.Context, f model.DashboardFilter, tab model.WorkQueueTab, page, limit int) (*model.WorkQueuePage, error)
 }
 
 type dashboardService struct {
@@ -39,4 +40,8 @@ func NewDashboardService(repo repository.DashboardRepository) DashboardService {
 
 func (s *dashboardService) Get(ctx context.Context, f model.DashboardFilter) (*model.DashboardData, error) {
 	return s.repo.Get(ctx, f)
+}
+
+func (s *dashboardService) GetWorkQueuePage(ctx context.Context, f model.DashboardFilter, tab model.WorkQueueTab, page, limit int) (*model.WorkQueuePage, error) {
+	return s.repo.GetWorkQueuePage(ctx, f, tab, page, limit)
 }

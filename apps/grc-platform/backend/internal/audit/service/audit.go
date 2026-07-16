@@ -112,6 +112,9 @@ func (s *auditService) Update(ctx context.Context, id int, req model.UpdateAudit
 }
 
 func (s *auditService) Delete(ctx context.Context, id int, deletedBy string) error {
+	if deletedBy == "" {
+		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "authenticated user email is missing from token — check Asgardeo app email scope"}
+	}
 	a, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return err

@@ -46,24 +46,30 @@ type entEvidence struct {
 
 // entFile mirrors the entity's AuditEvidenceFile JSON.
 type entFile struct {
-	ID         int     `json:"id"`
-	EvidenceID *int    `json:"evidenceId"`
-	FileName   string  `json:"fileName"`
-	FilePath   string  `json:"filePath"`
-	FileType   *string `json:"fileType"`
-	FileSize   *int64  `json:"fileSize"`
+	ID         int       `json:"id"`
+	EvidenceID *int      `json:"evidenceId"`
+	FileName   string    `json:"fileName"`
+	FilePath   string    `json:"filePath"`
+	FileType   *string   `json:"fileType"`
+	FileSize   *int64    `json:"fileSize"`
+	CreatedBy  *string   `json:"createdBy"`
+	CreatedOn  time.Time `json:"createdOn"`
 }
 
 func (f entFile) toModel() *model.AuditEvidenceFile {
 	m := &model.AuditEvidenceFile{
-		ID:       f.ID,
-		FileName: f.FileName,
-		FilePath: f.FilePath,
-		FileType: f.FileType,
-		FileSize: f.FileSize,
+		ID:        f.ID,
+		FileName:  f.FileName,
+		FilePath:  f.FilePath,
+		FileType:  f.FileType,
+		FileSize:  f.FileSize,
+		CreatedAt: f.CreatedOn,
 	}
 	if f.EvidenceID != nil {
 		m.EvidenceID = *f.EvidenceID
+	}
+	if f.CreatedBy != nil {
+		m.CreatedBy = *f.CreatedBy
 	}
 	return m
 }
@@ -126,10 +132,18 @@ func (r *evidenceRepo) ListByControl(ctx context.Context, auditID, controlID int
 	return out, nil
 }
 
+func (r *evidenceRepo) DeleteEvidence(ctx context.Context, evidenceID int) error {
+	return r.c.Delete(ctx, fmt.Sprintf("/evidence/%d", evidenceID))
+}
+
 func (r *evidenceRepo) GetFileByID(ctx context.Context, fileID int) (*model.AuditEvidenceFile, error) {
 	var f entFile
 	if err := r.c.Get(ctx, fmt.Sprintf("/evidence-files/%d", fileID), &f); err != nil {
 		return nil, err
 	}
 	return f.toModel(), nil
+}
+
+func (r *evidenceRepo) DeleteFile(ctx context.Context, fileID int) error {
+	return r.c.Delete(ctx, fmt.Sprintf("/evidence-files/%d", fileID))
 }

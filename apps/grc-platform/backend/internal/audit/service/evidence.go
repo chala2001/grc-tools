@@ -35,6 +35,11 @@ type EvidenceService interface {
 	// upload session. The client then POSTs each file to the upload endpoint.
 	GetUploadLink(ctx context.Context, auditID, controlID int) (*model.UploadLinkResponse, error)
 
+	// PopulationUploadLink returns the stable population folder path for an OE
+	// control's active round (the segment after population/ is the population id,
+	// not a timestamp). No credential is issued — the path is used verbatim.
+	PopulationUploadLink(auditID, controlID, populationID int) *model.UploadLinkResponse
+
 	// UploadFile stores one file into the session folder by proxying the bytes
 	// through the backend to the Compliance Entity, which writes it to Azure.
 	// No storage credential is handed to the client.
@@ -51,6 +56,11 @@ type EvidenceService interface {
 	// DownloadFile returns one evidence file's bytes (proxied via the Compliance
 	// Entity) plus its name and content type, by file ID.
 	DownloadFile(ctx context.Context, fileID int) (data []byte, fileName, contentType string, err error)
+
+	// DeleteFile removes a single evidence file from the submission. The caller
+	// must be the file's creator or hold ManageControls (isAdmin=true). The blob
+	// in Azure is not deleted — only the DB record is removed.
+	DeleteFile(ctx context.Context, fileID int, actor string, isAdmin bool) error
 }
 
 type evidenceService struct {
@@ -62,6 +72,50 @@ func NewEvidenceService(repo repository.EvidenceRepository, storage *file.Servic
 	return &evidenceService{repo: repo, storage: storage}
 }
 
+// ValidateEvidenceFolderPath enforces that folderPath is exactly
+// "audits/{auditID}/controls/{controlID}/evidence/{sessionTs}/" with a digits-only
+// session segment. auditID is derived server-side from the control row (never
+// trusted from the client), so a caller cannot aim bytes at another control's
+// folder. Returns a 400 apierror on mismatch.
+func ValidateEvidenceFolderPath(folderPath string, auditID, controlID int) error {
+	prefix := fmt.Sprintf("audits/%d/controls/%d/evidence/", auditID, controlID)
+	rest, ok := strings.CutPrefix(folderPath, prefix)
+	if !ok {
+		return errFolderPathMismatch
+	}
+	seg, ok := strings.CutSuffix(rest, "/")
+	if !ok || seg == "" || !isDigits(seg) {
+		return errFolderPathMismatch
+	}
+	return nil
+}
+
+// ValidatePopulationFolderPath enforces that folderPath is exactly
+// "audits/{auditID}/controls/{controlID}/population/{populationID}/". The
+// population id is resolved server-side from the active round, so a caller cannot
+// target another population's folder. Returns a 400 apierror on mismatch.
+func ValidatePopulationFolderPath(folderPath string, auditID, controlID, populationID int) error {
+	want := fmt.Sprintf("audits/%d/controls/%d/population/%d/", auditID, controlID, populationID)
+	if folderPath != want {
+		return errFolderPathMismatch
+	}
+	return nil
+}
+
+var errFolderPathMismatch = &apierror.Error{
+	StatusCode: http.StatusBadRequest,
+	Body:       "folderPath does not match this control",
+}
+
+func isDigits(s string) bool {
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return s != ""
+}
+
 func (s *evidenceService) GetUploadLink(_ context.Context, auditID, controlID int) (*model.UploadLinkResponse, error) {
 	folderPath := fmt.Sprintf("audits/%d/controls/%d/evidence/%d/",
 		auditID, controlID, time.Now().Unix())
@@ -69,6 +123,13 @@ func (s *evidenceService) GetUploadLink(_ context.Context, auditID, controlID in
 		FolderPath: folderPath,
 		ExpiresAt:  time.Now().UTC().Add(4 * time.Hour),
 	}, nil
+}
+
+func (s *evidenceService) PopulationUploadLink(auditID, controlID, populationID int) *model.UploadLinkResponse {
+	return &model.UploadLinkResponse{
+		FolderPath: fmt.Sprintf("audits/%d/controls/%d/population/%d/", auditID, controlID, populationID),
+		ExpiresAt:  time.Now().UTC().Add(4 * time.Hour),
+	}
 }
 
 func (s *evidenceService) UploadFile(ctx context.Context, folderPath, fileName, contentType string, data []byte) error {
@@ -88,6 +149,10 @@ func (s *evidenceService) UploadFile(ctx context.Context, folderPath, fileName, 
 func (s *evidenceService) Submit(ctx context.Context, auditID, controlID int, folderPath, submittedBy string) (*model.AuditEvidence, error) {
 	if folderPath == "" {
 		return nil, &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "folderPath is required"}
+	}
+	expectedPrefix := fmt.Sprintf("audits/%d/controls/%d/evidence/", auditID, controlID)
+	if !strings.HasPrefix(folderPath, expectedPrefix) {
+		return nil, &apierror.Error{StatusCode: http.StatusBadRequest, Body: "folderPath does not match this audit/control"}
 	}
 
 	blobs, err := s.storage.ListBlobs(ctx, folderPath)
@@ -113,6 +178,8 @@ func (s *evidenceService) Submit(ctx context.Context, auditID, controlID int, fo
 		ct := blob.ContentType
 		sz := blob.Size
 		if err := s.repo.AddFile(ctx, evidenceID, blob.FileName(), filePath, &ct, &sz, submittedBy); err != nil {
+			// Best-effort rollback: remove the evidence record so no empty submission is persisted.
+			_ = s.repo.DeleteEvidence(ctx, evidenceID)
 			return nil, err
 		}
 		files = append(files, &model.AuditEvidenceFile{
@@ -170,4 +237,18 @@ func (s *evidenceService) DownloadFile(ctx context.Context, fileID int) (data []
 		ct = *f.FileType
 	}
 	return data, f.FileName, ct, nil
+}
+
+func (s *evidenceService) DeleteFile(ctx context.Context, fileID int, actor string, isAdmin bool) error {
+	f, err := s.repo.GetFileByID(ctx, fileID)
+	if err != nil {
+		return err
+	}
+	if f == nil {
+		return &apierror.Error{StatusCode: http.StatusNotFound, Body: "file not found"}
+	}
+	if !isAdmin && f.CreatedBy != actor {
+		return &apierror.Error{StatusCode: http.StatusForbidden, Body: "forbidden"}
+	}
+	return s.repo.DeleteFile(ctx, fileID)
 }

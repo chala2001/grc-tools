@@ -31,6 +31,7 @@ type DashboardStats struct {
 	OverdueControls          int     `json:"overdueControls"`
 	EvidenceRequiredControls int     `json:"evidenceRequiredControls"`
 	CompletionPercent        float64 `json:"completionPercent"`
+	TotalActionItems         int     `json:"totalActionItems"`
 }
 
 // StatusCount is one slice of the "Controls by Status" donut chart.
@@ -44,6 +45,15 @@ type TeamCompletion struct {
 	Team      string `json:"team"`
 	Completed int    `json:"completed"`
 	Total     int    `json:"total"`
+	Overdue   int    `json:"overdue"`
+}
+
+// TeamStatusCount is one team's control count for a single status — feeds the
+// per-team status breakdown in the dashboard's team drill-down.
+type TeamStatusCount struct {
+	Team   string `json:"team"`
+	Status string `json:"status"`
+	Count  int    `json:"count"`
 }
 
 // ActionItem is a single entry in the "My Action Items" list.
@@ -55,6 +65,8 @@ type ActionItem struct {
 	Description   string `json:"description"`
 	Status        string `json:"status"`
 	DueDate       string `json:"dueDate"`
+	Team         string `json:"team"`
+	ProcessOwner  string `json:"processOwner"`
 }
 
 // OverdueControl is a single entry in the "Overdue Controls" list.
@@ -66,16 +78,37 @@ type OverdueControl struct {
 	Description   string `json:"description"`
 	Status        string `json:"status"`
 	DueDate       string `json:"dueDate"`
+	Team         string `json:"team"`
+	ProcessOwner  string `json:"processOwner"`
 }
 
 // DashboardData is the full payload returned by GET /api/v1/audit/dashboard.
 type DashboardData struct {
-	AuditStats         AuditStats       `json:"auditStats"`
-	Stats              DashboardStats   `json:"stats"`
-	StatusDistribution []StatusCount    `json:"statusDistribution"`
-	TeamCompletion     []TeamCompletion `json:"teamCompletion"`
-	ActionItems        []ActionItem     `json:"actionItems"`
-	OverdueControls    []OverdueControl `json:"overdueControls"`
+	AuditStats             AuditStats        `json:"auditStats"`
+	Stats                  DashboardStats    `json:"stats"`
+	StatusDistribution     []StatusCount     `json:"statusDistribution"`
+	TeamCompletion         []TeamCompletion  `json:"teamCompletion"`
+	TeamStatusDistribution []TeamStatusCount `json:"teamStatusDistribution"`
+	ActionItems            []ActionItem      `json:"actionItems"`
+	DueSoonItems           []ActionItem      `json:"dueSoonItems"`
+	OverdueControls        []OverdueControl  `json:"overdueControls"`
+}
+
+// WorkQueueTab identifies which sub-list the caller wants.
+type WorkQueueTab string
+
+const (
+	WorkQueueTabActionItems WorkQueueTab = "action-items"
+	WorkQueueTabDueSoon     WorkQueueTab = "due-soon"
+	WorkQueueTabOverdue     WorkQueueTab = "overdue"
+)
+
+// WorkQueuePage is the paginated response for GET /api/v1/audit/work-queue.
+type WorkQueuePage struct {
+	Items []ActionItem `json:"items"`
+	Total int          `json:"total"`
+	Page  int          `json:"page"`
+	Limit int          `json:"limit"`
 }
 
 // DashboardFilter carries the query scope derived from the user's JWT roles.
@@ -105,7 +138,9 @@ var asgardeoGroupRoles = map[string]string{
 	"grc-platform-internal-team":          RoleInternalTeam,
 	"grc-platform-external-auditor":       RoleExternalAuditor,
 	"grc-platform-management":             RoleManagement,
-	// Testing catch-all group — full visibility, mirroring its allow-all privileges.
+	// Read-only auditor sees the same org-wide scope as management.
+	"grc-platform-internal-auditor": RoleManagement,
+	// Testing catch-all group — full visibility for local development.
 	"wso2-everyone": RoleComplianceAdmin,
 }
 

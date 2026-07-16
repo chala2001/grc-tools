@@ -57,6 +57,12 @@ type ControlService interface {
 	UpdateStatus(ctx context.Context, auditID, controlID int, req model.UpdateStatusRequest, updatedBy string) error
 	Delete(ctx context.Context, auditID, controlID int) error
 	GetAssignedForEvidence(ctx context.Context, userEmail string) ([]*model.AssignedControlForEvidence, error)
+	// AssignedAuditID returns the audit id for controlID when userEmail's team is
+	// assigned and the control is actionable; found=false means not assigned.
+	AssignedAuditID(ctx context.Context, userEmail string, controlID int) (auditID int, found bool, err error)
+	// ActivePopulationID returns the active population round id for an OE control;
+	// found=false means no active population (e.g. a DESIGN control).
+	ActivePopulationID(ctx context.Context, controlID int) (populationID int, found bool, err error)
 }
 
 type controlService struct {
@@ -150,12 +156,24 @@ func (s *controlService) GetAssignedForEvidence(ctx context.Context, userEmail s
 	return s.repo.ListAssignedForEvidence(ctx, userEmail)
 }
 
+func (s *controlService) AssignedAuditID(ctx context.Context, userEmail string, controlID int) (int, bool, error) {
+	return s.repo.AssignedAuditID(ctx, userEmail, controlID)
+}
+
+func (s *controlService) ActivePopulationID(ctx context.Context, controlID int) (int, bool, error) {
+	return s.repo.ActivePopulationID(ctx, controlID)
+}
+
 func validateAddRequest(req model.AddControlRequest) error {
-	if req.ControlNumber == "" {
-		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "controlNumber is required"}
-	}
-	if req.Description == "" {
-		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "description is required"}
+	// Framework-linked controls omit controlNumber/description; the entity resolves
+	// them from the template via COALESCE. Skip those checks for that path.
+	if req.FrameworkControlID == nil {
+		if req.ControlNumber == "" {
+			return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "controlNumber is required"}
+		}
+		if req.Description == "" {
+			return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "description is required"}
+		}
 	}
 	if req.RequirementType != "DESIGN" && req.RequirementType != "OE" {
 		return &apierror.Error{StatusCode: http.StatusUnprocessableEntity, Body: "requirementType must be DESIGN or OE"}

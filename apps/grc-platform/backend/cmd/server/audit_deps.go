@@ -20,13 +20,15 @@ import (
 	audithandler "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/handler"
 	auditentity "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/repository/entity"
 	auditservice "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/service"
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/config"
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/aiagent"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/entityclient"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/file"
 )
 
 // buildAuditDeps wires Audit Hub dependencies. The audit module now reads/writes
 // ALL data through the Compliance Entity (via ec) — no direct MySQL access.
-func buildAuditDeps(fileSvc *file.Service, ec *entityclient.Client) audithandler.Deps {
+func buildAuditDeps(fileSvc *file.Service, ec *entityclient.Client, aiCfg config.AIValidationConfig) audithandler.Deps {
 	// ── Repositories (all Compliance Entity) ──────────────────────────────────
 	auditRepo := auditentity.NewAuditRepository(ec)
 	frameworkRepo := auditentity.NewFrameworkRepository(ec)
@@ -37,7 +39,10 @@ func buildAuditDeps(fileSvc *file.Service, ec *entityclient.Client) audithandler
 	commentRepo := auditentity.NewCommentRepository(ec)
 	controlRepo := auditentity.NewControlRepository(ec)
 	evidenceRepo := auditentity.NewEvidenceRepository(ec)
+	populationRepo := auditentity.NewPopulationRepository(ec)
+	trailRepo := auditentity.NewTrailRepository(ec)
 	dashboardRepo := auditentity.NewDashboardRepository(ec)
+	aiValidationRepo := auditentity.NewAIValidationRepository(ec)
 
 	// ── Services ──────────────────────────────────────────────────────────────
 	auditSvc := auditservice.NewAuditService(auditRepo, frameworkRepo, productRepo)
@@ -47,18 +52,31 @@ func buildAuditDeps(fileSvc *file.Service, ec *entityclient.Client) audithandler
 	teamSvc := auditservice.NewTeamService(teamRepo)
 	dashboardSvc := auditservice.NewDashboardService(dashboardRepo)
 	evidenceSvc := auditservice.NewEvidenceService(evidenceRepo, fileSvc)
+	populationSvc := auditservice.NewPopulationService(populationRepo, fileSvc)
+	trailSvc := auditservice.NewTrailService(trailRepo)
 	commentSvc := auditservice.NewCommentService(commentRepo)
+	aiValidationSvc := auditservice.NewAIValidationService(aiValidationRepo)
+
+	// AI validation trigger client — only when explicitly enabled per env.
+	var aiAgent *aiagent.Client
+	if aiCfg.Enabled {
+		aiAgent = aiagent.New(aiCfg.AgentBaseURL, aiCfg.AgentAPIKey)
+	}
 
 	return audithandler.Deps{
-		Audit:     auditSvc,
-		Control:   controlSvc,
-		Framework: frameworkSvc,
-		User:      userSvc,
-		Team:      teamSvc,
-		Dashboard: dashboardSvc,
-		Evidence:  evidenceSvc,
-		Comment:   commentSvc,
-		// Population, Review, Assignment, Trail, Notification
-		// are wired here as their implementations are added.
+		Audit:        auditSvc,
+		Control:      controlSvc,
+		Framework:    frameworkSvc,
+		User:         userSvc,
+		Team:         teamSvc,
+		Dashboard:    dashboardSvc,
+		Evidence:     evidenceSvc,
+		Population:   populationSvc,
+		Trail:        trailSvc,
+		Comment:      commentSvc,
+		AIValidation: aiValidationSvc,
+		AIAgent:      aiAgent,
+		// Review, Assignment, Notification are wired here as their
+		// implementations are added.
 	}
 }

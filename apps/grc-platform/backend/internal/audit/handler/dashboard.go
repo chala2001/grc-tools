@@ -18,6 +18,7 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/model"
 	auditservice "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/service"
@@ -49,4 +50,36 @@ func (h *dashboardHandler) getDashboard(w http.ResponseWriter, r *http.Request) 
 	}
 
 	response.WriteJSONValue(w, http.StatusOK, data)
+}
+
+func (h *dashboardHandler) getWorkQueue(w http.ResponseWriter, r *http.Request) {
+	if !auth.RequirePrivilege(r.Context(), w, privilege.ViewAudits) {
+		return
+	}
+	user := auth.FromContext(r.Context())
+
+	f := model.DashboardFilter{}
+	if user != nil {
+		f.Roles = user.Groups
+		f.UserEmail = user.Email
+	}
+
+	q := r.URL.Query()
+	tab := model.WorkQueueTab(q.Get("tab"))
+	if tab == "" {
+		tab = model.WorkQueueTabActionItems
+	}
+	page, _ := strconv.Atoi(q.Get("page"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 25
+	}
+
+	p, err := h.svc.GetWorkQueuePage(r.Context(), f, tab, page, limit)
+	if err != nil {
+		response.WriteError(w, http.StatusInternalServerError, "Failed to load work queue.")
+		return
+	}
+
+	response.WriteJSONValue(w, http.StatusOK, p)
 }

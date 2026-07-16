@@ -19,8 +19,6 @@
 --   audit_trail             — immutable event log for an audit
 -- =============================================================================
 
-USE grc_platform_dev;
-
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- =============================================================================
@@ -336,14 +334,16 @@ CREATE TABLE IF NOT EXISTS audit_ai_validation_log (
   id               BIGINT       NOT NULL AUTO_INCREMENT,
   evidence_id      INT          NOT NULL,
   control_id       INT          NOT NULL,
-  result           ENUM('PASS','FAIL','UNCERTAIN') NOT NULL,
-  gaps_found       TEXT         NULL,
+  -- PASS/FAIL/UNCERTAIN are verdicts; PENDING (job started) and ERROR (job
+  -- failed) are lifecycle rows appended by the validation agent (append-only,
+  -- no UPDATEs — the UI reads the latest row per evidence).
+  result           ENUM('PASS','FAIL','UNCERTAIN','PENDING','ERROR') NOT NULL,
+  gaps_found       TEXT         NULL,     -- JSON array of gap objects
+  feedback         TEXT         NULL,     -- JSON array of submitter-facing action strings
   summary          TEXT         NULL,
   confidence_score DECIMAL(5,4) NULL,
   created_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_by       VARCHAR(255) NULL,
-  updated_at       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  updated_by       VARCHAR(255) NULL,
   PRIMARY KEY (id),
   KEY idx_ai_evidence (evidence_id),
   KEY idx_ai_control  (control_id),

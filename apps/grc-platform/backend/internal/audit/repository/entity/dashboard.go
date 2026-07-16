@@ -41,3 +41,18 @@ func (r *dashboardRepo) Get(ctx context.Context, f model.DashboardFilter) (*mode
 	}
 	return &data, nil
 }
+
+func (r *dashboardRepo) GetWorkQueuePage(ctx context.Context, f model.DashboardFilter, tab model.WorkQueueTab, page, limit int) (*model.WorkQueuePage, error) {
+	body := map[string]any{
+		"roles":     f.NormalizedRoles(),
+		"userEmail": f.UserEmail,
+		"tab":       string(tab),
+		"page":      page,
+		"limit":     limit,
+	}
+	var p model.WorkQueuePage
+	if err := r.c.Post(ctx, "/audit/work-queue/search", body, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}

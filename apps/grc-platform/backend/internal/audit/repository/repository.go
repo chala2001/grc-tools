@@ -63,6 +63,13 @@ type ControlRepository interface {
 	// ListAssignedForEvidence returns all controls assigned to the team of userEmail
 	// that are in a status requiring evidence submission.
 	ListAssignedForEvidence(ctx context.Context, userEmail string) ([]*model.AssignedControlForEvidence, error)
+	// AssignedAuditID reports whether userEmail's team is assigned to controlID for
+	// an actionable status, and returns the control's audit id (for server-side
+	// folder-path derivation). found=false means not assigned (403).
+	AssignedAuditID(ctx context.Context, userEmail string, controlID int) (auditID int, found bool, err error)
+	// ActivePopulationID returns the active population round for an OE control.
+	// found=false means no active population (e.g. a DESIGN control).
+	ActivePopulationID(ctx context.Context, controlID int) (populationID int, found bool, err error)
 }
 
 // UserRepository is the data-access contract for the shared user list (owner/auditor dropdowns).
@@ -78,6 +85,7 @@ type TeamRepository interface {
 // DashboardRepository aggregates cross-cutting dashboard stats and action items.
 type DashboardRepository interface {
 	Get(ctx context.Context, f model.DashboardFilter) (*model.DashboardData, error)
+	GetWorkQueuePage(ctx context.Context, f model.DashboardFilter, tab model.WorkQueueTab, page, limit int) (*model.WorkQueuePage, error)
 }
 
 // EvidenceRepository is the data-access contract for audit evidence submissions.
@@ -86,14 +94,24 @@ type EvidenceRepository interface {
 	Create(ctx context.Context, auditID, controlID int, folderPath, createdBy string) (int, error)
 	// AddFile inserts a single audit_evidence_file row linked to evidenceID.
 	AddFile(ctx context.Context, evidenceID int, fileName, filePath string, fileType *string, fileSize *int64, createdBy string) error
+	// DeleteEvidence removes an evidence row by ID (used for best-effort rollback on partial failure).
+	DeleteEvidence(ctx context.Context, evidenceID int) error
 	// ListByControl returns all evidence submissions for a control, newest first, with files pre-loaded.
 	ListByControl(ctx context.Context, auditID, controlID int) ([]*model.AuditEvidence, error)
 	// GetFileByID returns a single evidence file row by its ID (for downloads).
 	GetFileByID(ctx context.Context, fileID int) (*model.AuditEvidenceFile, error)
+	// DeleteFile removes a single evidence file row by ID.
+	DeleteFile(ctx context.Context, fileID int) error
 }
 
-// These remain empty — add methods as their handlers are implemented.
-type PopulationRepository interface{}
+// PopulationRepository is the data-access contract for OE-control population
+// submissions (used by the Evidence Portal population flow).
+type PopulationRepository interface {
+	// AddFile records one uploaded population blob against a population round.
+	AddFile(ctx context.Context, populationID int, fileKind, fileName, filePath string, fileType *string, fileSize *int64, createdBy string) error
+	// UpdateStatus advances the population round's status (e.g. → SUBMITTED).
+	UpdateStatus(ctx context.Context, populationID int, status, updatedBy string) error
+}
 
 // CommentRepository is the data-access contract for audit_comment (evidence-scoped).
 type CommentRepository interface {
@@ -102,8 +120,19 @@ type CommentRepository interface {
 }
 type AssignmentRepository interface{}
 type NotificationRepository interface{}
-type AIValidationLogRepository interface{}
-type TrailRepository interface{}
+
+// TrailRepository appends entries to the append-only audit_trail (via the entity).
+type TrailRepository interface {
+	// Create appends one audit_trail entry under auditID. controlID/evidenceID are
+	// optional; details is a raw JSON string (may be empty).
+	Create(ctx context.Context, auditID int, controlID, evidenceID *int, action, details, createdBy string) error
+}
+
+// AIValidationLogRepository reads AI evidence-validation rows from the
+// Compliance Entity (advisory hints written by the async validation agent).
+type AIValidationLogRepository interface {
+	ListByEvidence(ctx context.Context, evidenceID int) ([]*model.AIValidationLog, error)
+}
 
 // ReviewRepository is the data-access contract for audit_item_review.
 // TODO: add Review/List/GetByID methods as the table schema is finalised.

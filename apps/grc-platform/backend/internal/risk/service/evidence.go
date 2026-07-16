@@ -20,12 +20,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/apierror"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/model"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/risk/repository"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/file"
 )
+
+const maxRiskEvidenceBytes = 25 << 20 // 25 MiB
 
 // EvidenceService defines business operations for risk evidence files.
 type EvidenceService interface {
@@ -48,23 +52,30 @@ func (s *evidenceService) List(ctx context.Context, riskID int) ([]*model.RiskEv
 }
 
 func (s *evidenceService) Upload(ctx context.Context, riskID int, fileName, contentType string, content io.Reader, createdBy string) (*model.RiskEvidence, error) {
-	data, err := io.ReadAll(content)
+	data, err := io.ReadAll(io.LimitReader(content, maxRiskEvidenceBytes+1))
 	if err != nil {
 		return nil, err
+	}
+	if int64(len(data)) > maxRiskEvidenceBytes {
+		return nil, &apierror.Error{StatusCode: http.StatusRequestEntityTooLarge, Body: "file exceeds 25 MB limit"}
 	}
 	// Store under a per-risk evidence folder; the Compliance Entity writes to Azure
 	// (the backend never talks to Azure directly). The stored file_path is the
 	// relative blob name, downloaded later by proxy through the entity.
-	blobName := fmt.Sprintf("risks/%d/evidence/%d/%s", riskID, time.Now().Unix(), fileName)
+	blobName := fmt.Sprintf("risks/%d/evidence/%d/%s", riskID, time.Now().UnixNano(), fileName)
 	if err := s.storage.UploadBlob(ctx, blobName, contentType, data); err != nil {
 		return nil, err
 	}
 	// evidence_type defaults to ACTION_PLAN_ATTACHMENT for uploaded attachments.
-	return s.repo.Create(ctx, riskID, fileName, blobName, "", "ACTION_PLAN_ATTACHMENT", createdBy)
+	ev, err := s.repo.Create(ctx, riskID, fileName, blobName, "", "ACTION_PLAN_ATTACHMENT", createdBy)
+	if err != nil {
+		// Best-effort blob cleanup so the orphaned file doesn't linger in Azure.
+		_ = s.storage.Delete(ctx, blobName)
+		return nil, err
+	}
+	return ev, nil
 }
 
 func (s *evidenceService) Delete(ctx context.Context, riskID, evidenceID int, byUserID string) error {
-	// Remove the DB row. Blob cleanup can be added once a GetByID exposes the
-	// stored blob path; the file otherwise remains in the private container.
-	return s.repo.Delete(ctx, evidenceID)
+	return s.repo.Delete(ctx, riskID, evidenceID, byUserID)
 }

@@ -90,19 +90,21 @@ func main() {
 
 	userhandler.RegisterRoutes(mux, userDeps)
 	riskhandler.RegisterRoutes(mux, buildRiskDeps(sqlDB, fileSvc))
-	audithandler.RegisterRoutes(mux, buildAuditDeps(fileSvc, entityCli))
+	audithandler.RegisterRoutes(mux, buildAuditDeps(fileSvc, entityCli, cfg.AIValidation))
 
+	// Scope guard runs just inside Auth: an evidence-app-scoped token (IdP-2) is
+	// confined to /api/v1/evidence-app/* — 403 on any other route.
 	handler := middleware.CORS(cfg.CORSAllowedOrigin)(
 		middleware.CorrelationID(
 			middleware.Logger(
 				middleware.Auth(middleware.Config{
-					JWKSEndpoint:          cfg.Auth.JWKSEndpoint,
-					Issuer:                cfg.Auth.Issuer,
-					Audience:              cfg.Auth.Audience,
+					IdPs:                  cfg.Auth.IdPs,
 					ClockSkew:             cfg.Auth.ClockSkew,
 					TokenValidatorEnabled: cfg.Auth.TokenValidatorEnabled,
 					PrivilegeStore:        privStore,
-				})(mux),
+				})(
+					middleware.IssuerScope(mux),
+				),
 			),
 		),
 	)

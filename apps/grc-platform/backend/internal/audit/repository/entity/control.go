@@ -18,10 +18,13 @@ package entity
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sync"
 
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/apierror"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/model"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/repository"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/entityclient"
@@ -86,39 +89,8 @@ func (r *controlRepo) enrichPopulations(ctx context.Context, auditID int, contro
 		return
 	}
 
-	// id → display name lookups (one paged call each).
-	userNames := map[int]string{}
-	for offset := 0; ; offset += pageLimit {
-		var resp struct {
-			Users []*model.UserRef `json:"users"`
-		}
-		if err := r.c.Post(ctx, "/users/search", pageBody(offset), &resp); err != nil {
-			break
-		}
-		for _, u := range resp.Users {
-			userNames[u.ID] = u.DisplayName
-		}
-		if len(resp.Users) < pageLimit {
-			break
-		}
-	}
-	teamNames := map[int]string{}
-	for offset := 0; ; offset += pageLimit {
-		var resp struct {
-			Teams []*model.AuditTeam `json:"teams"`
-		}
-		if err := r.c.Post(ctx, "/audit/teams/search", pageBody(offset), &resp); err != nil {
-			break
-		}
-		for _, t := range resp.Teams {
-			teamNames[t.ID] = t.Name
-		}
-		if len(resp.Teams) < pageLimit {
-			break
-		}
-	}
-
-	// Fetch each OE control's populations with bounded concurrency.
+	// Fetch each OE control's populations and resolve owner/team names with
+	// point-lookups, avoiding full-table scans of the user and team directories.
 	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup
 	for _, c := range oe {
@@ -135,12 +107,16 @@ func (r *controlRepo) enrichPopulations(ctx context.Context, auditID int, contro
 			p := pops[len(pops)-1] // latest round
 			c.PopulationDueDate = p.DueDate
 			if p.OwnerID != nil {
-				if name, ok := userNames[*p.OwnerID]; ok {
+				var u model.UserRef
+				if err := r.c.Get(ctx, fmt.Sprintf("/users/%d", *p.OwnerID), &u); err == nil {
+					name := u.DisplayName
 					c.PopulationOwnerName = &name
 				}
 			}
 			if p.TeamID != nil {
-				if name, ok := teamNames[*p.TeamID]; ok {
+				var t model.AuditTeam
+				if err := r.c.Get(ctx, fmt.Sprintf("/audit/teams/%d", *p.TeamID), &t); err == nil {
+					name := t.Name
 					c.PopulationTeamName = &name
 				}
 			}
@@ -173,12 +149,36 @@ func (r *controlRepo) BulkCreate(ctx context.Context, auditID int, reqs []model.
 }
 
 func (r *controlRepo) Update(ctx context.Context, auditID, controlID int, req model.UpdateControlRequest, updatedBy string) error {
-	body := withField(req, map[string]any{"updatedBy": updatedBy})
+	body := map[string]any{"updatedBy": updatedBy}
+	if req.Description != nil {
+		body["description"] = req.Description
+	}
+	if req.ControlType != nil {
+		body["controlType"] = req.ControlType
+	}
+	if req.Scope != nil {
+		body["scope"] = req.Scope
+	}
+	if req.EvidenceRequirement != nil {
+		body["evidenceRequirement"] = req.EvidenceRequirement
+	}
+	if req.OwnerID != nil {
+		body["ownerId"] = req.OwnerID
+	}
+	if req.TeamID != nil {
+		body["teamId"] = req.TeamID
+	}
+	if req.AuditorID != nil {
+		body["auditorId"] = req.AuditorID
+	}
+	if req.DueDate != nil {
+		body["dueDate"] = req.DueDate
+	}
 	return r.c.Patch(ctx, fmt.Sprintf("/audits/%d/controls/%d", auditID, controlID), body, nil)
 }
 
 func (r *controlRepo) UpdateStatus(ctx context.Context, auditID, controlID int, status string, comment *string, updatedBy string) error {
-	body := map[string]any{"status": status, "updatedBy": updatedBy}
+	body := map[string]any{"status": status, "updatedBy": updatedBy, "comments": comment}
 	return r.c.Patch(ctx, fmt.Sprintf("/audits/%d/controls/%d", auditID, controlID), body, nil)
 }
 
@@ -195,4 +195,40 @@ func (r *controlRepo) ListAssignedForEvidence(ctx context.Context, userEmail str
 		return nil, err
 	}
 	return resp.Controls, nil
+}
+
+func (r *controlRepo) AssignedAuditID(ctx context.Context, userEmail string, controlID int) (int, bool, error) {
+	var resp struct {
+		AuditID int `json:"auditId"`
+	}
+	path := fmt.Sprintf("/audit-controls/%d/evidence-assignment?email=%s", controlID, url.QueryEscape(userEmail))
+	if err := r.c.Get(ctx, path, &resp); err != nil {
+		if notFound(err) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return resp.AuditID, true, nil
+}
+
+func (r *controlRepo) ActivePopulationID(ctx context.Context, controlID int) (int, bool, error) {
+	var resp struct {
+		PopulationID int `json:"populationId"`
+	}
+	path := fmt.Sprintf("/audit-controls/%d/active-population", controlID)
+	if err := r.c.Get(ctx, path, &resp); err != nil {
+		if notFound(err) {
+			return 0, false, nil
+		}
+		return 0, false, err
+	}
+	return resp.PopulationID, true, nil
+}
+
+// notFound reports whether err is an entity 404 (mapped to apierror.Error by the
+// entity client), so callers can treat "not assigned" / "no population" as a
+// domain condition rather than a transport error.
+func notFound(err error) bool {
+	var apiErr *apierror.Error
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }

@@ -19,20 +19,37 @@ package handler
 import (
 	"net/http"
 
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/model"
+	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/service"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/response"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/auth"
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/shared/privilege"
 )
 
-// handleDashboard serves GET /api/v1/risks/dashboard.
-func (d *Deps) handleDashboard(w http.ResponseWriter, r *http.Request) {
-	if !auth.RequirePrivilege(r.Context(), w, privilege.ViewRisks) {
+type aiValidationHandler struct {
+	svc service.AIValidationService
+}
+
+// listValidations handles GET /api/v1/evidence/{evidenceId}/ai-validations.
+//
+// Advisory review hints. Visible to anyone permitted to see the evidence —
+// submitters (for the pre-review feedback loop) and reviewers (for the hint) —
+// so it reuses SUBMIT_EVIDENCE OR REVIEW_EVIDENCE rather than a new privilege.
+func (h *aiValidationHandler) listValidations(w http.ResponseWriter, r *http.Request) {
+	if !auth.RequireAnyPrivilege(r.Context(), w, privilege.SubmitEvidence, privilege.ReviewEvidence) {
 		return
 	}
-	summary, err := d.Dashboard.Summary(r.Context())
+	evidenceID, ok := parseIntParam(w, r, "evidenceId")
+	if !ok {
+		return
+	}
+	validations, err := h.svc.ListByEvidence(r.Context(), evidenceID)
 	if err != nil {
 		response.MapServiceError(r.Context(), w, err, response.ErrMsgInternal)
 		return
 	}
-	response.WriteJSONValue(w, http.StatusOK, summary)
+	if validations == nil {
+		validations = []*model.AIValidationLog{}
+	}
+	response.WriteJSONValue(w, http.StatusOK, &model.AIValidationListResponse{Validations: validations})
 }
