@@ -7,8 +7,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str
 
     # Asgardeo tenant/org — used to build the UserInfo endpoint that validates
-    # every request's Bearer token.
-    ASGARDEO_ORG: str = "gvgj"
+    # every request's Bearer token. Required: no default, so a deployment
+    # that forgets to set it fails loudly at startup instead of silently
+    # validating logins against the wrong tenant.
+    ASGARDEO_ORG: str
 
     # Azure Blob Storage for evidence files. The connection string is required;
     # the backend has no local-filesystem fallback.

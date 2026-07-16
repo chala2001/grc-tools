@@ -44,9 +44,8 @@ os.environ.setdefault(
     "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
     "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;",
 )
-# Explicit, even though app/config.py still defaults this to "gvgj" today —
-# ticket #8 removes that default and makes the setting required, and this
-# harness should not regress when that lands.
+# Required: app/config.py has no default for this setting, so it must be in
+# the environment before anything imports app.config for the first time.
 os.environ.setdefault("ASGARDEO_ORG", "test-org")
 
 import pytest
