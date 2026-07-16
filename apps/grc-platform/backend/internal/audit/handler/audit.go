@@ -108,7 +108,7 @@ func (h *auditHandler) updateAudit(w http.ResponseWriter, r *http.Request) {
 
 // deleteAudit handles DELETE /api/v1/audits/{id}.
 func (h *auditHandler) deleteAudit(w http.ResponseWriter, r *http.Request) {
-	if !auth.RequirePrivilege(r.Context(), w, privilege.CreateAudit) {
+	if !auth.RequirePrivilege(r.Context(), w, privilege.UpdateAudit) {
 		return
 	}
 	id, ok := parseIntParam(w, r, "id")

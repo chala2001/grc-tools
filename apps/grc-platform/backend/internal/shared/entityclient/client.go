@@ -100,7 +100,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		msg := "data service error"
 		var e entityError
-		if raw, _ := io.ReadAll(resp.Body); len(raw) > 0 {
+		if raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10)); len(raw) > 0 {
 			if json.Unmarshal(raw, &e) == nil && e.Message != "" {
 				msg = e.Message
 			}
