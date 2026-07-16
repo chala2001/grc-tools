@@ -14,8 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-export const DUE_OVERDUE = "#E53935";
-export const DUE_SOON = "#FB8C00";
+export const DUE_OVERDUE = "#EF4444";
+export const DUE_SOON = "#F59E0B";
 
 /** Number of days ahead that counts as "due soon" on the dashboard. */
 export const DUE_SOON_DAYS = 7;

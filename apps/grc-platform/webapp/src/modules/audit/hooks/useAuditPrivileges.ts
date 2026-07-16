@@ -42,7 +42,10 @@ export function useAuditPrivileges(): AuditPrivilegeState {
       _promise = authFetch(`${BACKEND_BASE_URL}/api/v1/me/privileges`)
         .then((res) => res.json() as Promise<{ privileges?: string[]; allowAll?: boolean }>)
         .then((data) => data.allowAll ? null : new Set<string>(data.privileges ?? []))
-        .catch(() => new Set<string>());
+        .catch(() => {
+          _promise = null; // allow retry on next mount
+          return new Set<string>();
+        });
     }
     let cancelled = false;
     _promise.then((privs) => {

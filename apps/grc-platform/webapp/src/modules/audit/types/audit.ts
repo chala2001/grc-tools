@@ -124,8 +124,9 @@ export interface AuditControl {
   createdAt: string;
   updatedAt: string;
   samples?: PopulationSample[];
-  // Population-phase fields (OE controls). Optional — populated by the backend
-  // control query via a LEFT JOIN on audit_population; absent controls render "—".
+  // Population-phase fields (OE controls). Joined from the initial audit_population record.
+  populationDescription?: string | null;
+  populationComments?: string | null;
   populationDueDate?: string | null;
   populationOwnerName?: string | null;
   populationTeamName?: string | null;
@@ -180,9 +181,7 @@ export interface AddControlRequest {
 }
 
 export interface UpdateControlRequest {
-  controlNumber?: string;
   description?: string;
-  requirementType?: RequirementType;
   controlType?: ControlType;
   scope?: ControlScope;
   evidenceRequirement?: string | null;

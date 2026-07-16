@@ -22,7 +22,7 @@ import {
   Box,
 } from "@wso2/oxygen-ui";
 import { Palette, Check } from "@wso2/oxygen-ui-icons-react";
-import { type JSX, useState } from "react";
+import { type JSX, type MouseEvent, useState } from "react";
 import { useThemePreference } from "@context/theme/ThemePreferenceContext";
 import { isThemeKey } from "@config/themeConfig";
 
@@ -30,7 +30,7 @@ export default function ThemeSelect(): JSX.Element {
   const { themeKey, setThemeKey, options } = useThemePreference();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
 
-  const handleOpen = (e: React.MouseEvent<HTMLElement>): void => {
+  const handleOpen = (e: MouseEvent<HTMLElement>): void => {
     setAnchor(e.currentTarget);
   };
 
