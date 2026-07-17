@@ -110,27 +110,39 @@ def delete_evidence_file(file_id: int, db: Session = Depends(get_db), user: User
     if not ef:
         raise HTTPException(status_code=404, detail="File not found")
     evidence_id = ef.evidence_id
+    deleted_file_name = ef.file_name
     evidence = db.query(Evidence).filter(Evidence.id == evidence_id).first()
     # The Evidence's own file_name/file_url is a separate, legacy reference
     # alongside the EvidenceFile list (see ADR/spec for evidence.py:95): it
     # is "primary" exactly when it still points at the file being deleted.
     was_primary = evidence is not None and ef.file_name == evidence.file_name
 
-    delete_file(ef.file_name)
-    db.delete(ef)
-    db.commit()
-
+    # Read the survivor (if any) before mutating anything, so the decision --
+    # repoint the primary, delete the now-empty parent, or neither -- is made
+    # from a consistent, pre-mutation snapshot rather than a query that would
+    # otherwise see the deletion below once it autoflushes.
     remaining = (
         db.query(EvidenceFile)
-        .filter(EvidenceFile.evidence_id == evidence_id)
+        .filter(EvidenceFile.evidence_id == evidence_id, EvidenceFile.id != file_id)
         .order_by(EvidenceFile.sort_order)
         .all()
     )
+
+    # Every mutation happens in one transaction with a single commit, the
+    # same all-or-nothing principle create_evidence uses: a failed commit
+    # must leave nothing changed, rather than leaving an Evidence pointing at
+    # a blob that's already gone, or an Evidence with zero files. Blobs are
+    # only deleted after this commit succeeds (below) -- deleting first, the
+    # way the previous two-commit version did, strands storage even when
+    # just the first commit fails.
+    parent_deleted = False
+    legacy_blob_name: str | None = None
+    db.delete(ef)
     if not remaining:
         if evidence:
-            delete_file(evidence.file_name)
+            parent_deleted = True
+            legacy_blob_name = evidence.file_name
             db.delete(evidence)
-            db.commit()
     elif was_primary:
         # Repoint at the next surviving file rather than clearing the
         # reference: nulling it would push the inconsistency into every
@@ -140,7 +152,11 @@ def delete_evidence_file(file_id: int, db: Session = Depends(get_db), user: User
         survivor = remaining[0]
         evidence.file_name = survivor.file_name
         evidence.file_url = survivor.file_url
-        db.commit()
+    db.commit()
+
+    delete_file(deleted_file_name)
+    if parent_deleted:
+        delete_file(legacy_blob_name)
 
 
 @router.get("/{evidence_id}", response_model=EvidenceResponse)
