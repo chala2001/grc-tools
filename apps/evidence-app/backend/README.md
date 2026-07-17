@@ -59,10 +59,13 @@ New models must be imported in `alembic/env.py` for autogenerate to detect them.
 ## Tests
 
 Tests exercise the FastAPI app over HTTP (`TestClient`) with `get_current_user`
-and `get_db` overridden — no real Asgardeo or Azure account needed. `get_db` is
-backed by a throwaway **Postgres** database (not SQLite, so Postgres-specific
-column types behave the same as in production); each test runs in its own
-rolled-back transaction. See `tests/conftest.py` for the fixtures.
+and `get_db` overridden — no real Asgardeo account needed, and no fake stands
+in for Azure Blob Storage. `get_db` is backed by a throwaway **Postgres**
+database (not SQLite, so Postgres-specific column types behave the same as in
+production); each test runs in its own rolled-back transaction. Routes that
+upload, sign or delete files talk to a real **Azurite** blob-storage emulator,
+for the same reason: production behaviour, not an approximation of it. See
+`tests/conftest.py` for the fixtures.
 
 ```bash
 pip install -r requirements.txt -r requirements-test.txt
@@ -72,11 +75,32 @@ docker run -d --name evidence-app-test-db \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres \
   -e POSTGRES_DB=evidence_app_test -p 5433:5432 postgres:16
 
+# start a throwaway blob-storage emulator
+docker run -d --name evidence-app-test-blob -p 10000:10000 \
+  mcr.microsoft.com/azure-storage/azurite:latest \
+  azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+
 pytest
 ```
 
 By default tests connect to
 `postgresql://postgres:postgres@localhost:5433/evidence_app_test`; override
-with the `TEST_DATABASE_URL` environment variable to point elsewhere. Tables
-are created from the SQLAlchemy models directly (not via Alembic) at the
-start of the test session and dropped at the end.
+with the `TEST_DATABASE_URL` environment variable to point elsewhere — the
+suite refuses to run its destructive setup (`CREATE TABLE` / `DROP TABLE`)
+unless the database name is explicitly a test database (exactly `test`, or
+ending in `_test`), so a mis-set URL can't destroy real data. Tables are
+created from the SQLAlchemy models directly (not via Alembic) at the start of
+the test session and dropped at the end.
+
+The blob-storage emulator is expected at the host and port baked into
+`AZURE_STORAGE_CONNECTION_STRING` in `tests/conftest.py` (`127.0.0.1:10000` by
+default); the storage container is created once per run, and every blob the run
+uploaded is removed at the end, so runs don't accumulate files.
+
+**If you have `AZURE_STORAGE_CONNECTION_STRING` set in your environment, unset
+it before running the tests.** `conftest.py` only supplies the emulator default
+when the variable is absent, so an exported value wins — and these tests upload
+blobs, delete blobs, and clear the container at teardown. The suite therefore
+refuses to run unless the connection string names the emulator account
+(`devstoreaccount1`), mirroring the database-name guard above: a mis-set value
+can't touch real storage.

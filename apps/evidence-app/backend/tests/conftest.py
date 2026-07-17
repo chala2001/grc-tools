@@ -9,13 +9,21 @@ is imported for the first time anywhere in the test run. That's why the env
 defaults below run before any `app.*` import in this file.
 
 Tests exercise the FastAPI app over HTTP via `TestClient`, with two
-dependencies overridden so no real Asgardeo or Azure account is needed:
+dependencies overridden so no real Asgardeo account is needed and no fake
+stands in for Azure Blob Storage:
 
 - `get_current_user` -> a fake Engineer or Admin identity (`engineer_client`
   / `admin_client` fixtures below).
 - `get_db` -> a session on a throwaway Postgres database, wrapped in a
   transaction that's rolled back after every test for per-test isolation
   (`db_session` fixture below).
+
+Blob storage is *not* faked or overridden: routes that upload, sign or
+delete files talk to a real Azurite emulator, exactly as they would talk to
+real Azure in production (see the `blob_container` fixture below). This
+follows the same reasoning as choosing Postgres over SQLite — tests then
+assert the real property ("the file is gone") rather than an internal one
+("we called delete_file").
 
 Postgres was chosen over SQLite so Postgres-specific column types (e.g.
 `DateTime(timezone=True)`, `JSON`) behave the same in tests as in production
@@ -25,6 +33,14 @@ before running the suite, e.g.:
     docker run -d --name evidence-app-test-db \\
         -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres \\
         -e POSTGRES_DB=evidence_app_test -p 5433:5432 postgres:16
+
+A real Azurite blob-storage emulator must also be reachable, at the host and
+port baked into `AZURE_STORAGE_CONNECTION_STRING` below (`127.0.0.1:10000`
+by default), e.g.:
+
+    docker run -d --name evidence-app-test-blob -p 10000:10000 \\
+        mcr.microsoft.com/azure-storage/azurite:latest \\
+        azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
 """
 import os
 
@@ -34,26 +50,31 @@ TEST_DATABASE_URL = os.environ.get(
 )
 
 os.environ.setdefault("DATABASE_URL", TEST_DATABASE_URL)
-# A syntactically valid connection string (the well-known Azurite emulator
-# credential) so `BlobServiceClient.from_connection_string` parses cleanly at
-# import time. No network call happens at import — routes that actually touch
-# blob storage are out of scope for this smoke-level harness.
+# The well-known public Azurite emulator credential — not a secret. No
+# network call happens at import time; `blob_container` below is what
+# actually dials the emulator, once per session, and fails the run loudly if
+# it isn't reachable.
+AZURE_BLOB_EMULATOR_ENDPOINT = "127.0.0.1:10000"
 os.environ.setdefault(
     "AZURE_STORAGE_CONNECTION_STRING",
     "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;"
     "AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;"
-    "BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;",
+    f"BlobEndpoint=http://{AZURE_BLOB_EMULATOR_ENDPOINT}/devstoreaccount1;",
 )
 # Required: app/config.py has no default for this setting, so it must be in
 # the environment before anything imports app.config for the first time.
 os.environ.setdefault("ASGARDEO_ORG", "test-org")
 
 import pytest
+from azure.core.exceptions import ResourceExistsError
+from azure.storage.blob import BlobServiceClient
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.auth import User, get_current_user
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 
@@ -71,11 +92,88 @@ from app.models import (  # noqa: F401
 )
 
 
+def _parse_connection_string(conn_str: str) -> dict[str, str]:
+    """Split an Azure storage connection string into its `key=value;` parts.
+
+    Values can themselves contain "=" (account keys are base64), so each part
+    is split on the *first* "=" only.
+    """
+    parts = {}
+    for part in conn_str.split(";"):
+        if "=" in part:
+            key, value = part.split("=", 1)
+            parts[key.strip()] = value.strip()
+    return parts
+
+
+def _blob_endpoint(conn_str: str) -> str:
+    """The endpoint the storage client will actually dial, for error messages.
+
+    Never report a hardcoded guess: the connection string is read from the
+    environment and may point somewhere entirely different from the emulator
+    default, which is exactly the case an error most needs to be honest about.
+    """
+    parts = _parse_connection_string(conn_str)
+    return parts.get("BlobEndpoint") or parts.get("AccountName") or "<unknown endpoint>"
+
+
+def _is_emulator_storage(conn_str: str) -> bool:
+    """True only when `conn_str` explicitly names the local Azurite emulator.
+
+    The blob-storage counterpart of `_is_test_database` below, and it exists
+    for the same reason. `AZURE_STORAGE_CONNECTION_STRING` is read from the
+    environment with `os.environ.setdefault`, so an existing value — a
+    developer's real one, exported to run the app — wins over the emulator
+    default. Without this guard the suite would upload test blobs to, and
+    delete blobs from, whatever storage that names, and `blob_container`'s
+    teardown would wipe it.
+
+    Keyed on the account name being exactly the emulator's well-known
+    `devstoreaccount1`, which is what identifies the target, rather than on
+    the endpoint host — so Azurite reachable at some other host (a CI service
+    container, say) still works. As with `_is_test_database`, this rejects an
+    unconventionally-configured real emulator rather than risk accepting real
+    storage: "refuses to run" is the safe failure mode.
+    """
+    return _parse_connection_string(conn_str).get("AccountName") == "devstoreaccount1"
+
+
+def _is_test_database(url: str) -> bool:
+    """True only when the database *name* in `url` explicitly marks it as a
+    disposable test database: exactly "test", or ending in "_test"
+    (case-insensitive).
+
+    Deliberately looks at nothing but the database name — not the host,
+    user, or the URL string as a whole — because that's the one part of the
+    URL that names what `CREATE TABLE` / `DROP TABLE` actually runs against.
+    A host like "test-replica.prod.internal" or a database named
+    "attestation_log" both contain the letters "test" in a misleading
+    position; neither should be able to satisfy this guard. Requiring an
+    exact match or a "_test" suffix (not a bare substring) is what rules
+    those out, at the cost of also rejecting a real test database that
+    happens to be named unconventionally — a deliberate trade in favour of
+    "refuses to run" being the safe failure mode.
+    """
+    name = (make_url(url).database or "").lower()
+    return name == "test" or name.endswith("_test")
+
+
 @pytest.fixture(scope="session")
 def db_engine():
     """Session-scoped engine against the throwaway test Postgres. Creates
     every table from the SQLAlchemy models once for the whole run and drops
     them at the end; per-test isolation is handled by `db_session` below."""
+    if not _is_test_database(TEST_DATABASE_URL):
+        pytest.exit(
+            "Refusing to run destructive test setup (CREATE TABLE / DROP "
+            f"TABLE) against {TEST_DATABASE_URL!r}: its database name is "
+            "not explicitly a test database (must be exactly \"test\", or "
+            "end with \"_test\").\n"
+            "Point TEST_DATABASE_URL at a throwaway database instead, e.g.:\n"
+            "  postgresql://postgres:postgres@localhost:5433/evidence_app_test",
+            returncode=1,
+        )
+
     engine = create_engine(TEST_DATABASE_URL)
     try:
         with engine.connect():
@@ -97,6 +195,77 @@ def db_engine():
     finally:
         Base.metadata.drop_all(engine)
         engine.dispose()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def blob_container():
+    """Session-scoped, autouse: proves the Azurite blob-storage emulator is
+    reachable and creates the storage container once for the whole run —
+    mirroring `db_engine` above, both in what it checks (a real dependency
+    the suite needs) and how it fails (immediately, naming the endpoint and
+    how to start it).
+
+    Autouse so this happens unconditionally at the start of the run, exactly
+    like `db_engine`'s connectivity check — a test that doesn't explicitly
+    ask for a storage fixture still needs the container to exist before any
+    route under test tries to upload to it.
+
+    Creating the container is the one "destructive-ish" setup step blob
+    storage needs (parallel to `Base.metadata.create_all` for Postgres), so
+    it must be idempotent across repeated runs of the suite: a container
+    that already exists from a previous run is not an error.
+
+    Teardown deletes every blob the run left behind, mirroring `db_engine`'s
+    `drop_all` — without it, each run strands the blobs its uploads created
+    (the database rows roll back, the blobs do not), and they accumulate in
+    the emulator forever. The blobs are removed rather than the container
+    itself: deleting a container makes the name unusable until Azure finishes
+    reclaiming it, which would make consecutive runs flaky for no gain.
+    """
+    conn_str = settings.AZURE_STORAGE_CONNECTION_STRING
+    endpoint = _blob_endpoint(conn_str)
+
+    if not _is_emulator_storage(conn_str):
+        pytest.exit(
+            "Refusing to run blob-storage tests against "
+            f"{endpoint!r}: it is not the local Azurite emulator (its account "
+            'name is not "devstoreaccount1"). This suite uploads and deletes '
+            "real blobs, and clears the container at teardown, so it must "
+            "never point at real storage.\n"
+            "AZURE_STORAGE_CONNECTION_STRING is almost certainly set in your "
+            "environment — unset it, and the emulator default in "
+            "tests/conftest.py will be used instead.",
+            returncode=1,
+        )
+
+    # retry_total=0: the SDK's default retry policy backs off for over a
+    # minute before surfacing a connection error, which would make a missing
+    # emulator look like a hung suite rather than a fast, clear failure.
+    # Nothing here is worth retrying — either the emulator is up or it isn't.
+    service = BlobServiceClient.from_connection_string(
+        conn_str, retry_total=0, connection_timeout=5
+    )
+    try:
+        service.create_container(settings.AZURE_STORAGE_CONTAINER)
+    except ResourceExistsError:
+        pass
+    except Exception as exc:
+        pytest.exit(
+            "Could not reach the Azurite blob-storage emulator at "
+            f"{endpoint!r} ({exc!r}).\n"
+            "Start one, e.g.:\n"
+            "  docker run -d --name evidence-app-test-blob -p 10000:10000 \\\n"
+            "      mcr.microsoft.com/azure-storage/azurite:latest \\\n"
+            "      azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck",
+            returncode=1,
+        )
+
+    try:
+        yield
+    finally:
+        container = service.get_container_client(settings.AZURE_STORAGE_CONTAINER)
+        for blob in container.list_blobs():
+            container.delete_blob(blob.name)
 
 
 @pytest.fixture()
