@@ -30,6 +30,30 @@ def _cache_key(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _evict_expired_cache_entries(now: float) -> None:
+    """Remove every cache entry whose TTL has elapsed.
+
+    Called at the top of every request, before the cache is even looked
+    up, so an entry stops occupying space the moment it's stale — not just
+    when a read happens to land on that exact key. Without this, the only
+    thing that ever removed an entry was the same caller polling again
+    after it expired; a caller who stops polling (token rotated, session
+    ended) left their entry behind for the life of the process. The Runner
+    alone polls every 2s, so a long-running service grew steadily.
+
+    A plain dict scan, run every request: cheap relative to the network
+    call it's guarding, and the dict it scans is itself bounded by this
+    same eviction, so it never has room to become expensive.
+    """
+    expired = [
+        key
+        for key, (_, cached_at) in _userinfo_cache.items()
+        if now - cached_at >= _USERINFO_CACHE_TTL_SECONDS
+    ]
+    for key in expired:
+        del _userinfo_cache[key]
+
+
 class User(BaseModel):
     email: str
     role: str  # "admin" | "engineer"
@@ -65,8 +89,9 @@ async def get_current_user(request: Request) -> User:
     if auth_header.startswith("Bearer "):
         token = auth_header[len("Bearer "):]
         key = _cache_key(token)
-        cached = _userinfo_cache.get(key)
         now = time.monotonic()
+        _evict_expired_cache_entries(now)
+        cached = _userinfo_cache.get(key)
 
         if cached and now - cached[1] < _USERINFO_CACHE_TTL_SECONDS:
             info = cached[0]
