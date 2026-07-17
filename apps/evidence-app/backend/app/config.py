@@ -24,5 +24,11 @@ class Settings(BaseSettings):
     # Comma-separated CORS allow-list for the web frontend.
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:5174"
 
+    # SQLAlchemy connection pool size, per process (this is a hard cap — see
+    # app/database.py, which sets max_overflow=0). Each pod runs its own
+    # process with its own pool, so DB_POOL_SIZE x max_pod_count must stay
+    # comfortably under Postgres's own max_connections.
+    DB_POOL_SIZE: int = 30
+
 
 settings = Settings()
