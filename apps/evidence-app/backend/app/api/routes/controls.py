@@ -60,7 +60,13 @@ def delete_control(control_id: int, db: Session = Depends(get_db), user: User = 
     control = db.query(Control).filter(Control.id == control_id).first()
     if not control:
         raise HTTPException(status_code=404, detail="Control not found")
-    file_names = [ev.file_name for ev in control.evidence]
+    # Mirrors delete_evidence's own collection (the reference here): each
+    # Evidence's legacy primary file_name plus every file in its Evidence
+    # File list, not the primary alone.
+    file_names: list[str] = []
+    for ev in control.evidence:
+        file_names.extend({ef.file_name for ef in ev.files})
+        file_names.append(ev.file_name)
     db.delete(control)
     db.commit()
     for name in file_names:

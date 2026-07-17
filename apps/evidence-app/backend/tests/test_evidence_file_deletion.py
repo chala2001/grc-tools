@@ -20,54 +20,13 @@ whether some internal delete function was called. `create_evidence` only
 ever accepts one file per request, so a multi-file Evidence is built
 directly via the ORM here — the same approach test_signed_urls.py uses.
 """
-import io
-
 import httpx
-from fastapi import UploadFile
 
 from app.models.evidence import Evidence
 from app.models.evidence_file import EvidenceFile
-from app.storage.blob_storage import get_signed_url, save_file
+from app.storage.blob_storage import get_signed_url
 
-
-def _upload(name: str, content: bytes) -> tuple[str, str]:
-    """Puts a real blob into the test container and returns
-    (file_name, file_url) — what `save_file` returns for a real upload."""
-    return save_file(UploadFile(file=io.BytesIO(content), filename=name))
-
-
-def _build_evidence(
-    db_session, *files: tuple[str, bytes], created_by: str = "engineer@example.com"
-) -> tuple[Evidence, list[EvidenceFile]]:
-    """An Evidence whose primary reference and Evidence File list both point
-    at the first upload, followed by one EvidenceFile per remaining upload,
-    in presentation order (ascending sort_order) — the shape both
-    `create_evidence` and the AI-agent result path produce."""
-    uploads = [_upload(name, content) for name, content in files]
-    primary_name, primary_url = uploads[0]
-
-    evidence = Evidence(
-        title="Console screenshot",
-        file_name=primary_name,
-        file_url=primary_url,
-        created_by=created_by,
-    )
-    db_session.add(evidence)
-    db_session.flush()
-
-    evidence_files = [
-        EvidenceFile(evidence_id=evidence.id, file_name=file_name, file_url=file_url, sort_order=i)
-        for i, (file_name, file_url) in enumerate(uploads)
-    ]
-    for ef in evidence_files:
-        db_session.add(ef)
-    db_session.commit()
-
-    db_session.refresh(evidence)
-    for ef in evidence_files:
-        db_session.refresh(ef)
-
-    return evidence, evidence_files
+from tests.conftest import build_evidence as _build_evidence
 
 
 def test_deleting_the_primary_file_repoints_evidence_at_the_next_survivor(db_session, admin_client):

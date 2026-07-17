@@ -77,9 +77,13 @@ def delete_framework(framework_id: int, db: Session = Depends(get_db), user: Use
     framework = db.query(Framework).filter(Framework.id == framework_id).first()
     if not framework:
         raise HTTPException(status_code=404, detail="Framework not found")
+    # Mirrors delete_evidence's own collection (the reference here): each
+    # Evidence's legacy primary file_name plus every file in its Evidence
+    # File list, not the primary alone.
     file_names: list[str] = []
     for ctrl in framework.controls:
         for ev in ctrl.evidence:
+            file_names.extend({ef.file_name for ef in ev.files})
             file_names.append(ev.file_name)
     db.delete(framework)
     db.commit()

@@ -13,12 +13,18 @@ router = APIRouter(prefix="/products", tags=["Products"])
 
 
 def _collect_evidence_files(product: Product) -> list[str]:
-    """Walk product → frameworks → controls → evidence to gather file_names that
-    will be removed when this product cascades."""
+    """Walk product → frameworks → controls → evidence to gather every blob
+    that will need removing when this product cascades.
+
+    Mirrors `delete_evidence`'s own collection, which is the reference here:
+    each Evidence's legacy primary `file_name` plus every file in its
+    Evidence File list, not the primary alone. Without the Evidence File
+    list, every screenshot beyond the first survives its database row."""
     files: list[str] = []
     for fw in product.frameworks:
         for ctrl in fw.controls:
             for ev in ctrl.evidence:
+                files.extend({ef.file_name for ef in ev.files})
                 files.append(ev.file_name)
     return files
 

@@ -65,9 +65,12 @@ os.environ.setdefault(
 # the environment before anything imports app.config for the first time.
 os.environ.setdefault("ASGARDEO_ORG", "test-org")
 
+import io
+
 import pytest
 from azure.core.exceptions import ResourceExistsError
 from azure.storage.blob import BlobServiceClient
+from fastapi import UploadFile
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url
@@ -78,8 +81,11 @@ from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 from app.models.control import Control
+from app.models.evidence import Evidence
+from app.models.evidence_file import EvidenceFile
 from app.models.framework import Framework
 from app.models.product import Product
+from app.storage.blob_storage import save_file
 
 # Import every model so Base.metadata knows about all tables — mirrors the
 # import list in alembic/env.py, which needs the same thing for autogenerate.
@@ -351,8 +357,11 @@ def admin_client(db_session, admin_user):
 # --- Shared test helpers -----------------------------------------------
 #
 # Used by more than one test module (originally written for
-# test_evidence_creation.py; also needed by test_evidence_file_deletion.py),
-# so they live here rather than being copy-pasted between them.
+# test_evidence_creation.py and test_evidence_file_deletion.py; `upload_blob`
+# and `build_evidence` were promoted here from test_evidence_file_deletion.py
+# once test_cascade_evidence_file_deletion.py needed the same multi-file
+# Evidence construction too), so they live here rather than being
+# copy-pasted between test modules.
 
 
 def uploaded_blob_names() -> set[str]:
@@ -380,3 +389,53 @@ def make_control(db_session) -> Control:
     db_session.commit()
     db_session.refresh(control)
     return control
+
+
+def upload_blob(name: str, content: bytes) -> tuple[str, str]:
+    """Puts a real blob into the test container and returns
+    (file_name, file_url) — what `save_file` returns for a real upload."""
+    return save_file(UploadFile(file=io.BytesIO(content), filename=name))
+
+
+def build_evidence(
+    db_session,
+    *files: tuple[str, bytes],
+    control_id: int | None = None,
+    created_by: str = "engineer@example.com",
+) -> tuple[Evidence, list[EvidenceFile]]:
+    """An Evidence whose primary reference and Evidence File list both point
+    at the first upload, followed by one EvidenceFile per remaining upload,
+    in presentation order (ascending sort_order) — the shape both
+    `create_evidence` and the AI-agent result path produce.
+
+    `control_id` is optional so callers that only need a bare multi-file
+    Evidence (e.g. Evidence File deletion tests) don't have to build a
+    Control chain they don't otherwise need; cascade tests pass the id of a
+    real Control (see `make_control` above) so the Evidence is actually
+    reachable via product -> frameworks -> controls -> evidence."""
+    uploads = [upload_blob(name, content) for name, content in files]
+    primary_name, primary_url = uploads[0]
+
+    evidence = Evidence(
+        title="Console screenshot",
+        file_name=primary_name,
+        file_url=primary_url,
+        control_id=control_id,
+        created_by=created_by,
+    )
+    db_session.add(evidence)
+    db_session.flush()
+
+    evidence_files = [
+        EvidenceFile(evidence_id=evidence.id, file_name=file_name, file_url=file_url, sort_order=i)
+        for i, (file_name, file_url) in enumerate(uploads)
+    ]
+    for ef in evidence_files:
+        db_session.add(ef)
+    db_session.commit()
+
+    db_session.refresh(evidence)
+    for ef in evidence_files:
+        db_session.refresh(ef)
+
+    return evidence, evidence_files
