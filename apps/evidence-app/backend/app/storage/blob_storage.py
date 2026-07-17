@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from azure.core.exceptions import ResourceNotFoundError
 from azure.storage.blob import BlobSasPermissions, BlobServiceClient, generate_blob_sas
@@ -78,10 +79,24 @@ def get_signed_url(file_ref: str, expiry_minutes: int = SIGNED_URL_EXPIRY_MINUTE
     never touched; this only runs at read/serialization time, so existing
     rows need no migration.
 
+    Idempotent: a stored file reference is always relative (`/uploads/...`
+    or a bare blob name), so a value that already carries a scheme
+    (`https://...`) is, by construction, an already-signed URL, not a stored
+    reference, and is returned unchanged. Without this, handing an
+    already-signed URL back in would strip nothing (there is no
+    "/uploads/" prefix to remove), so the whole signed URL — signature,
+    expiry and all — would be treated as a blob name and signed again,
+    producing a link to a blob that does not exist. Not reachable today
+    (FastAPI validates a response model, and therefore signs, exactly
+    once), but the same signing call is used from every validator that
+    signs a link on the way out, so guarding it here covers all of them.
+
     `generate_blob_sas` is purely local (no network call) — it only needs
     the account name and account key, both already known from the storage
     connection string.
     """
+    if urlparse(file_ref).scheme:
+        return file_ref
     blob_name = file_ref.removeprefix("/uploads/")
     service = _get_blob_service()
     blob_client = service.get_blob_client(
