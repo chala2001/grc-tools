@@ -159,7 +159,7 @@ function ControlFormDialog({
   const isValid =
     form.controlNumber.trim().length > 0 &&
     form.description.trim().length > 0 &&
-    (!isOE || editMode || form.populationDescription.trim().length > 0);
+    (!isOE || editMode || (form.populationDescription.trim().length > 0 && form.populationDueDate.length > 0));
 
   return (
     <Dialog

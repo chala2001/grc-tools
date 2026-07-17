@@ -19,6 +19,7 @@ import { ExternalLink, FileText, Trash2 } from "@wso2/oxygen-ui-icons-react";
 import { useState, type JSX } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGetEvidence, evidenceQueryKey } from "@modules/audit/api/useGetEvidence";
+import { aiValidationQueryKey } from "@modules/audit/api/useGetAIValidation";
 import { useAuthApiClient } from "@hooks/useAuthApiClient";
 import { BACKEND_BASE_URL } from "@config/apiConfig";
 import { formatTimestamp } from "@modules/audit/utils/format";
@@ -64,7 +65,7 @@ export default function SubmittedEvidenceList({
     }
   }
 
-  async function handleDelete(fileId: number): Promise<void> {
+  async function handleDelete(fileId: number, evidenceId: number): Promise<void> {
     setDeleteError(null);
     setDeletingId(fileId);
     try {
@@ -74,6 +75,7 @@ export default function SubmittedEvidenceList({
         throw new Error(msg || `Failed to remove file (${res.status})`);
       }
       await queryClient.invalidateQueries({ queryKey: evidenceQueryKey(auditId, controlId) });
+      void queryClient.invalidateQueries({ queryKey: aiValidationQueryKey(evidenceId) });
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : "Failed to remove file");
     } finally {
@@ -140,7 +142,7 @@ export default function SubmittedEvidenceList({
                   size="small"
                   aria-label={`Remove ${f.fileName}`}
                   disabled={deletingId !== null}
-                  onClick={() => { void handleDelete(f.id); }}
+                  onClick={() => { void handleDelete(f.id, sub.id); }}
                   sx={{ p: 0.5, color: "error.main", "&:hover": { bgcolor: "rgba(220,38,38,0.06)" } }}
                 >
                   {deletingId === f.id

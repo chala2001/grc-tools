@@ -63,7 +63,15 @@ export function parseGaps(gapsFound: string | null): AIGap[] {
   if (!gapsFound) return [];
   try {
     const parsed = JSON.parse(gapsFound);
-    return Array.isArray(parsed) ? (parsed as AIGap[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (e): e is AIGap =>
+        typeof e === "object" &&
+        e !== null &&
+        typeof (e as Record<string, unknown>).requirementAspect === "string" &&
+        typeof (e as Record<string, unknown>).issue === "string" &&
+        typeof (e as Record<string, unknown>).severity === "string",
+    );
   } catch {
     return [];
   }
@@ -74,7 +82,9 @@ export function parseFeedback(feedback: string | null): string[] {
   if (!feedback) return [];
   try {
     const parsed = JSON.parse(feedback);
-    return Array.isArray(parsed) ? (parsed as string[]) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((e): e is string => typeof e === "string")
+      : [];
   } catch {
     return [];
   }

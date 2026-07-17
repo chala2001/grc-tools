@@ -266,10 +266,7 @@ function DesignEvidenceSection({
                 variant="outlined"
                 startIcon={withdraw.isPending ? <CircularProgress size={13} color="inherit" /> : <RotateCcw size={14} />}
                 disabled={withdraw.isPending}
-                onClick={() => withdraw.mutate(
-                  { auditId: control.auditId, controlId: control.id },
-                  { onSuccess: () => onStatusChange("EVIDENCE_PENDING") },
-                )}
+                onClick={() => withdraw.mutate({ auditId: control.auditId, controlId: control.id })}
                 sx={{ textTransform: "none", color: "#b45309", borderColor: "#b45309", "&:hover": { borderColor: "#92400e", bgcolor: "rgba(180,83,9,0.04)" } }}
               >
                 Edit Submission
@@ -515,10 +512,7 @@ function OEEvidenceSection({
                   variant="outlined"
                   startIcon={withdraw.isPending ? <CircularProgress size={13} color="inherit" /> : <RotateCcw size={14} />}
                   disabled={withdraw.isPending}
-                  onClick={() => withdraw.mutate(
-                    { auditId: control.auditId, controlId: control.id },
-                    { onSuccess: () => onStatusChange("EVIDENCE_PENDING") },
-                  )}
+                  onClick={() => withdraw.mutate({ auditId: control.auditId, controlId: control.id })}
                   sx={{ textTransform: "none", color: "#b45309", borderColor: "#b45309", "&:hover": { borderColor: "#92400e", bgcolor: "rgba(180,83,9,0.04)" } }}
                 >
                   Edit Submission
@@ -810,7 +804,7 @@ export default function ControlDrawer({ control, open, onClose }: ControlDrawerP
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.7 }}>
                 Review the submitted evidence internally before passing it to the auditor.
               </Typography>
-              {canReviewEvidence && (
+              {canReviewEvidence && control.status === "EVIDENCE_INTERNAL_REVIEW" && (
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
                   <Button
                     variant="contained"
@@ -843,7 +837,7 @@ export default function ControlDrawer({ control, open, onClose }: ControlDrawerP
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.7 }}>
                 Validate the submitted evidence and take a final decision on this control.
               </Typography>
-              {canReviewEvidence && (
+              {canReviewEvidence && control.status === "EVIDENCE_UNDER_VALIDATION" && (
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
                   <Button
                     variant="contained"

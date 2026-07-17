@@ -125,7 +125,7 @@ function ColFilter({ label, options, selected, onChange }: ColFilterProps): JSX.
               input: {
                 startAdornment: <Search size={14} style={{ marginRight: 4 }} />,
                 endAdornment: query ? (
-                  <IconButton size="small" edge="end" onClick={() => setQuery("")}><X size={12} /></IconButton>
+                  <IconButton size="small" edge="end" aria-label="Clear search" onClick={() => setQuery("")}><X size={12} /></IconButton>
                 ) : null,
               },
             }}
@@ -168,21 +168,16 @@ function TabPanel({ tab, canApprove, emptyText }: TabPanelProps): JSX.Element {
   const [teamFilter, setTeamFilter] = useState<string[]>([]);
   const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
 
-  const { data, isLoading, isError } = useGetWorkQueue(tab, page + 1);
+  const { data, isLoading, isError } = useGetWorkQueue(tab, page + 1, teamFilter, ownerFilter);
 
   const items: ActionItem[] = data?.items ?? [];
   const total = data?.total ?? 0;
   const limit = data?.limit ?? 25;
 
+  // Derive available options from the current page; when no filter is active
+  // these reflect the full unfiltered set for that page.
   const teams = [...new Set(items.map((r) => r.team ?? "").filter(Boolean))].sort();
   const owners = [...new Set(items.map((r) => r.processOwner ?? "").filter(Boolean))].sort();
-
-  // Client-side filter on the current page's items (team/owner within this page).
-  const filtered = items.filter((r) => {
-    if (teamFilter.length > 0 && !teamFilter.includes(r.team ?? "")) return false;
-    if (ownerFilter.length > 0 && !ownerFilter.includes(r.processOwner ?? "")) return false;
-    return true;
-  });
 
   const hasFilters = teamFilter.length > 0 || ownerFilter.length > 0;
 
@@ -237,7 +232,7 @@ function TabPanel({ tab, canApprove, emptyText }: TabPanelProps): JSX.Element {
                 <Box sx={{ display: "flex", alignItems: "center" }}>
                   Team
                   {teams.length > 0 && (
-                    <ColFilter label="Team" options={teams} selected={teamFilter} onChange={(v) => setTeamFilter(v)} />
+                    <ColFilter label="Team" options={teams} selected={teamFilter} onChange={(v) => { setTeamFilter(v); setPage(0); }} />
                   )}
                 </Box>
               </TableCell>
@@ -245,14 +240,14 @@ function TabPanel({ tab, canApprove, emptyText }: TabPanelProps): JSX.Element {
                 <Box sx={{ display: "flex", alignItems: "center" }}>
                   Process Owner
                   {owners.length > 0 && (
-                    <ColFilter label="Process Owner" options={owners} selected={ownerFilter} onChange={(v) => setOwnerFilter(v)} />
+                    <ColFilter label="Process Owner" options={owners} selected={ownerFilter} onChange={(v) => { setOwnerFilter(v); setPage(0); }} />
                   )}
                 </Box>
               </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filtered.map((item) => {
+            {items.map((item) => {
               const due = dueInfo(item.dueDate);
               return (
                 <TableRow
@@ -306,7 +301,7 @@ function TabPanel({ tab, canApprove, emptyText }: TabPanelProps): JSX.Element {
         component="div"
         count={total}
         page={page}
-        onPageChange={(_, p) => { setPage(p); setTeamFilter([]); setOwnerFilter([]); }}
+        onPageChange={(_, p) => setPage(p)}
         rowsPerPage={limit}
         rowsPerPageOptions={[limit]}
         sx={{ borderTop: 1, borderColor: "divider" }}

@@ -380,6 +380,7 @@ function PopulationDialog({
           <Select
             fullWidth
             displayEmpty
+            inputProps={{ "aria-label": "Team (Population)" }}
             value={pop.teamId !== null ? String(pop.teamId) : ""}
             onChange={(e) => {
               const v = e.target.value as string;
@@ -1344,6 +1345,7 @@ function Step2Controls({
           <Select
             fullWidth
             displayEmpty
+            inputProps={{ "aria-label": "Source audit" }}
             value={copyAuditId !== null ? String(copyAuditId) : ""}
             onChange={(e) => {
               const v = e.target.value as string;
@@ -1743,7 +1745,7 @@ export default function CreateAuditPage(): JSX.Element {
             onRefetchFrameworks={refetchFrameworks}
             onRefetchProducts={refetchProducts}
             onNameChange={setName}
-            onFrameworkChange={setFramework}
+            onFrameworkChange={(v) => { setFramework(v); setCopyAuditId(null); setDrafts([]); }}
             onProductChange={setProduct}
             onPeriodStartChange={setPeriodStart}
             onPeriodEndChange={setPeriodEnd}

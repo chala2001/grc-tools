@@ -30,14 +30,16 @@ export interface WorkQueuePage {
 
 const LIMIT = 25;
 
-export function useGetWorkQueue(tab: WorkQueueTab, page: number) {
+export function useGetWorkQueue(tab: WorkQueueTab, page: number, teams: string[] = [], owners: string[] = []) {
   const authFetch = useAuthApiClient();
 
   return useQuery({
-    queryKey: ["audit", "work-queue", tab, page] as const,
+    queryKey: ["audit", "work-queue", tab, page, teams, owners] as const,
     queryFn: async (): Promise<WorkQueuePage> => {
-      const url = `${BACKEND_BASE_URL}/api/v1/audit/work-queue?tab=${tab}&page=${page}&limit=${LIMIT}`;
-      const res = await authFetch(url);
+      const params = new URLSearchParams({ tab, page: String(page), limit: String(LIMIT) });
+      if (teams.length > 0) params.set("teams", teams.join(","));
+      if (owners.length > 0) params.set("owners", owners.join(","));
+      const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/audit/work-queue?${params.toString()}`);
       if (!res.ok) throw new Error(`Failed to load work queue (${res.status})`);
       return res.json() as Promise<WorkQueuePage>;
     },

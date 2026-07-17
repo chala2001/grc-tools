@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/wso2-open-operations/grc-tools/entity/compliance-entity/internal/domain"
 )
@@ -338,6 +339,20 @@ func (r *dashboardRepo) queryActionItemsCount(ctx context.Context, req domain.Au
 	return count, nil
 }
 
+// buildInFilter builds a SQL "AND col IN (?,?,...)" fragment and its args for a
+// slice of string values. Returns empty string and nil when vals is empty.
+func buildInFilter(col string, vals []string) (string, []any) {
+	if len(vals) == 0 {
+		return "", nil
+	}
+	phs := strings.Repeat("?,", len(vals))
+	args := make([]any, len(vals))
+	for i, v := range vals {
+		args[i] = v
+	}
+	return fmt.Sprintf(" AND %s IN (%s)", col, phs[:len(phs)-1]), args // #nosec G201
+}
+
 // GetWorkQueuePage returns a single paginated page of work-queue items.
 func (r *dashboardRepo) GetWorkQueuePage(ctx context.Context, req domain.WorkQueueRequest) (*domain.WorkQueuePage, error) {
 	// Resolve scope the same way as the dashboard.
@@ -358,6 +373,18 @@ func (r *dashboardRepo) GetWorkQueuePage(ctx context.Context, req domain.WorkQue
 	}
 	offset := (page - 1) * limit
 
+	// Build optional team/owner filter fragments. Page queries already JOIN
+	// audit_team (t) and user (u); count queries need the extra JOINs only when
+	// these filters are active.
+	teamSQL, teamArgs := buildInFilter("t.name", req.Teams)
+	ownerSQL, ownerArgs := buildInFilter("u.display_name", req.Owners)
+	filterSQL := teamSQL + ownerSQL
+	filterArgs := append(teamArgs, ownerArgs...)
+	countJoins := ""
+	if filterSQL != "" {
+		countJoins = " LEFT JOIN audit_team t ON t.id = c.team_id LEFT JOIN `user` u ON u.id = c.owner_id" // #nosec G201
+	}
+
 	var items []domain.DashboardControlItem
 	var total int
 
@@ -368,8 +395,9 @@ func (r *dashboardRepo) GetWorkQueuePage(ctx context.Context, req domain.WorkQue
 			return &domain.WorkQueuePage{Items: []domain.DashboardControlItem{}, Total: 0, Page: page, Limit: limit}, nil
 		}
 		// count
-		cq := fmt.Sprintf(`SELECT COUNT(*) FROM audit_control c JOIN audit a ON a.id = c.audit_id %s AND %s`, baseWhere, statusFilter) // #nosec G201
-		if err := r.db.QueryRowContext(ctx, cq, args...).Scan(&total); err != nil {
+		cq := fmt.Sprintf(`SELECT COUNT(*) FROM audit_control c JOIN audit a ON a.id = c.audit_id%s %s AND %s%s`, countJoins, baseWhere, statusFilter, filterSQL) // #nosec G201
+		cqArgs := append(args, filterArgs...)
+		if err := r.db.QueryRowContext(ctx, cq, cqArgs...).Scan(&total); err != nil {
 			return nil, err
 		}
 		// page
@@ -385,8 +413,8 @@ func (r *dashboardRepo) GetWorkQueuePage(ctx context.Context, req domain.WorkQue
 			LEFT JOIN audit_framework_control fc ON fc.id = c.framework_control_id
 			LEFT JOIN audit_team t ON t.id = c.team_id
 			LEFT JOIN `+"`user`"+` u ON u.id = c.owner_id
-			%s AND %s ORDER BY c.due_date ASC, c.id ASC LIMIT ? OFFSET ?`, baseWhere, statusFilter) // #nosec G201
-		pageArgs := append(args, limit, offset)
+			%s AND %s%s ORDER BY c.due_date ASC, c.id ASC LIMIT ? OFFSET ?`, baseWhere, statusFilter, filterSQL) // #nosec G201
+		pageArgs := append(append(args, filterArgs...), limit, offset)
 		items, err = r.scanControlItems(ctx, q, pageArgs)
 
 	case domain.WorkQueueTabDueSoon:
@@ -394,9 +422,10 @@ func (r *dashboardRepo) GetWorkQueuePage(ctx context.Context, req domain.WorkQue
 		if !ok {
 			return &domain.WorkQueuePage{Items: []domain.DashboardControlItem{}, Total: 0, Page: page, Limit: limit}, nil
 		}
-		dueSoonWhere := fmt.Sprintf(`%s AND %s AND c.due_date IS NOT NULL AND c.due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)`, baseWhere, statusFilter) // #nosec G201
-		cq := fmt.Sprintf(`SELECT COUNT(*) FROM audit_control c JOIN audit a ON a.id = c.audit_id %s`, dueSoonWhere)                                                          // #nosec G201
-		if err := r.db.QueryRowContext(ctx, cq, args...).Scan(&total); err != nil {
+		dueSoonWhere := fmt.Sprintf(`%s AND %s AND c.due_date IS NOT NULL AND c.due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)%s`, baseWhere, statusFilter, filterSQL) // #nosec G201
+		cq := fmt.Sprintf(`SELECT COUNT(*) FROM audit_control c JOIN audit a ON a.id = c.audit_id%s %s`, countJoins, dueSoonWhere)                                                          // #nosec G201
+		cqArgs := append(args, filterArgs...)
+		if err := r.db.QueryRowContext(ctx, cq, cqArgs...).Scan(&total); err != nil {
 			return nil, err
 		}
 		q := fmt.Sprintf(`
@@ -412,13 +441,14 @@ func (r *dashboardRepo) GetWorkQueuePage(ctx context.Context, req domain.WorkQue
 			LEFT JOIN audit_team t ON t.id = c.team_id
 			LEFT JOIN `+"`user`"+` u ON u.id = c.owner_id
 			%s ORDER BY c.due_date ASC, c.id ASC LIMIT ? OFFSET ?`, dueSoonWhere) // #nosec G201
-		pageArgs := append(args, limit, offset)
+		pageArgs := append(append(args, filterArgs...), limit, offset)
 		items, err = r.scanControlItems(ctx, q, pageArgs)
 
 	default: // overdue
-		overdueWhere := fmt.Sprintf(`%s AND c.due_date IS NOT NULL AND c.due_date < CURDATE() AND c.status != 'COMPLETE'`, baseWhere) // #nosec G201
-		cq := fmt.Sprintf(`SELECT COUNT(*) FROM audit_control c JOIN audit a ON a.id = c.audit_id %s`, overdueWhere)                  // #nosec G201
-		if err := r.db.QueryRowContext(ctx, cq, args...).Scan(&total); err != nil {
+		overdueWhere := fmt.Sprintf(`%s AND c.due_date IS NOT NULL AND c.due_date < CURDATE() AND c.status != 'COMPLETE'%s`, baseWhere, filterSQL) // #nosec G201
+		cq := fmt.Sprintf(`SELECT COUNT(*) FROM audit_control c JOIN audit a ON a.id = c.audit_id%s %s`, countJoins, overdueWhere)                 // #nosec G201
+		cqArgs := append(args, filterArgs...)
+		if err := r.db.QueryRowContext(ctx, cq, cqArgs...).Scan(&total); err != nil {
 			return nil, err
 		}
 		q := fmt.Sprintf(`
@@ -434,7 +464,7 @@ func (r *dashboardRepo) GetWorkQueuePage(ctx context.Context, req domain.WorkQue
 			LEFT JOIN audit_team t ON t.id = c.team_id
 			LEFT JOIN `+"`user`"+` u ON u.id = c.owner_id
 			%s ORDER BY c.due_date ASC LIMIT ? OFFSET ?`, overdueWhere) // #nosec G201
-		pageArgs := append(args, limit, offset)
+		pageArgs := append(append(args, filterArgs...), limit, offset)
 		items, err = r.scanControlItems(ctx, q, pageArgs)
 	}
 

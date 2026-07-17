@@ -117,6 +117,10 @@ type DashboardFilter struct {
 	Roles []string
 	// UserEmail is the authenticated user's email (used to look up team/auditor ID).
 	UserEmail string
+	// Teams optionally restricts work-queue results to specific team names.
+	Teams []string
+	// Owners optionally restricts work-queue results to specific process owner display names.
+	Owners []string
 }
 
 // Role constants — mirror the Asgardeo group names exactly.

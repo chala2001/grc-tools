@@ -113,8 +113,10 @@ type WorkQueueRequest struct {
 	Roles     []string     `json:"roles"`
 	UserEmail string       `json:"userEmail"`
 	Tab       WorkQueueTab `json:"tab"`
-	Page      int          `json:"page"`  // 1-based
-	Limit     int          `json:"limit"` // rows per page; capped at 100 server-side
+	Page      int          `json:"page"`   // 1-based
+	Limit     int          `json:"limit"`  // rows per page; capped at 100 server-side
+	Teams     []string     `json:"teams"`  // filter by team name; nil/empty = all teams
+	Owners    []string     `json:"owners"` // filter by process owner display name; nil/empty = all owners
 }
 
 // PrimaryRole re-uses the same priority logic as AuditDashboardRequest.
