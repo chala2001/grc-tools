@@ -104,10 +104,6 @@ export default function TeamProgress({ data, onTeamClick }: TeamProgressProps): 
         })}
       </Box>
 
-      {clickable && (
-        <Typography variant="caption" color="text.secondary" sx={{ pt: 1, flexShrink: 0 }}>
-        </Typography>
-      )}
     </Box>
   );
 }

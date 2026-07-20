@@ -183,7 +183,7 @@ function draftToRequest(d: DraftControl): AddControlRequest {
       teamId: d.teamId,
       auditorId: d.auditorId,
       population,
-    } as AddControlRequest;
+    };
   }
   return {
     controlNumber: d.controlNumber.trim(),

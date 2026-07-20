@@ -44,6 +44,8 @@ import { CONTROL_STATUS_COLORS, CONTROL_STATUS_LABELS } from "@modules/audit/uti
 import type { ControlStatus } from "@modules/audit/types/audit";
 import type { ActionItem } from "@modules/audit/types/dashboard";
 import { useGetWorkQueue, type WorkQueueTab } from "@modules/audit/api/useGetWorkQueue";
+import { useGetTeams } from "@modules/audit/api/useGetTeams";
+import { useGetUsers } from "@modules/audit/api/useGetUsers";
 import { dueInfo } from "./dueDate";
 
 function statusColor(s: string): string {
@@ -73,11 +75,16 @@ function actionLabel(status: string, canApprove: boolean): string {
 
 // ── Column filter ─────────────────────────────────────────────────────────────
 
+interface FilterOption {
+  id: number;
+  label: string;
+}
+
 interface ColFilterProps {
   label: string;
-  options: string[];
-  selected: string[];
-  onChange: (v: string[]) => void;
+  options: FilterOption[];
+  selected: number[];
+  onChange: (v: number[]) => void;
 }
 
 function ColFilter({ label, options, selected, onChange }: ColFilterProps): JSX.Element {
@@ -85,11 +92,11 @@ function ColFilter({ label, options, selected, onChange }: ColFilterProps): JSX.
   const [query, setQuery] = useState("");
   const isActive = selected.length > 0;
   const visible = query.trim()
-    ? options.filter((o) => o.toLowerCase().includes(query.toLowerCase()))
+    ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
     : options;
 
-  function toggle(v: string) {
-    onChange(selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v]);
+  function toggle(id: number) {
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
   }
 
   return (
@@ -141,9 +148,9 @@ function ColFilter({ label, options, selected, onChange }: ColFilterProps): JSX.
               <Typography variant="caption" color="text.secondary" sx={{ px: 1, py: 1, display: "block" }}>No matches</Typography>
             ) : visible.map((opt) => (
               <FormControlLabel
-                key={opt}
-                control={<Checkbox size="small" checked={selected.includes(opt)} onChange={() => toggle(opt)} disableRipple sx={{ p: 0.5 }} />}
-                label={<Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.4 }}>{opt || "—"}</Typography>}
+                key={opt.id}
+                control={<Checkbox size="small" checked={selected.includes(opt.id)} onChange={() => toggle(opt.id)} disableRipple sx={{ p: 0.5 }} />}
+                label={<Typography variant="body2" sx={{ fontSize: "0.82rem", lineHeight: 1.4 }}>{opt.label || "—"}</Typography>}
                 sx={{ display: "flex", alignItems: "center", px: 0.5, py: 0.1, borderRadius: 1, mx: 0, width: "100%", "&:hover": { bgcolor: "action.hover" } }}
               />
             ))}
@@ -165,19 +172,27 @@ interface TabPanelProps {
 function TabPanel({ tab, canApprove, emptyText }: TabPanelProps): JSX.Element {
   const navigate = useNavigate();
   const [page, setPage] = useState(0); // 0-based for MUI, 1-based for API
-  const [teamFilter, setTeamFilter] = useState<string[]>([]);
-  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
+  const [teamFilter, setTeamFilter] = useState<number[]>([]);
+  const [ownerFilter, setOwnerFilter] = useState<number[]>([]);
 
   const { data, isLoading, isError } = useGetWorkQueue(tab, page + 1, teamFilter, ownerFilter);
+  const { data: teamsData } = useGetTeams();
+  const { data: usersData } = useGetUsers();
 
   const items: ActionItem[] = data?.items ?? [];
   const total = data?.total ?? 0;
   const limit = data?.limit ?? 25;
 
-  // Derive available options from the current page; when no filter is active
-  // these reflect the full unfiltered set for that page.
-  const teams = [...new Set(items.map((r) => r.team ?? "").filter(Boolean))].sort();
-  const owners = [...new Set(items.map((r) => r.processOwner ?? "").filter(Boolean))].sort();
+  // Source filter options from the full unfiltered lists so all values are
+  // selectable regardless of which page is currently displayed.
+  const teams: FilterOption[] = (teamsData ?? [])
+    .map((t) => ({ id: t.id, label: t.name }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const owners: FilterOption[] = (usersData ?? [])
+    .filter((u) => u.userType === "INTERNAL")
+    .map((u) => ({ id: u.id, label: u.displayName }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   const hasFilters = teamFilter.length > 0 || ownerFilter.length > 0;
 
@@ -193,7 +208,7 @@ function TabPanel({ tab, canApprove, emptyText }: TabPanelProps): JSX.Element {
     return <Alert severity="error" sx={{ m: 1 }}>Failed to load items. Please refresh.</Alert>;
   }
 
-  if (total === 0) {
+  if (total === 0 && !hasFilters) {
     return (
       <Box sx={{ py: 4, textAlign: "center" }}>
         <CheckCircle size={32} color="#43A047" />
@@ -206,11 +221,11 @@ function TabPanel({ tab, canApprove, emptyText }: TabPanelProps): JSX.Element {
     <Box>
       {hasFilters && (
         <Box sx={{ px: 0.5, pb: 1, display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center" }}>
-          {teamFilter.map((t) => (
-            <Chip key={t} label={t} size="small" onDelete={() => setTeamFilter((p) => p.filter((x) => x !== t))} />
+          {teamFilter.map((id) => (
+            <Chip key={id} label={teams.find((t) => t.id === id)?.label ?? String(id)} size="small" onDelete={() => setTeamFilter((p) => p.filter((x) => x !== id))} />
           ))}
-          {ownerFilter.map((o) => (
-            <Chip key={o} label={o} size="small" onDelete={() => setOwnerFilter((p) => p.filter((x) => x !== o))} />
+          {ownerFilter.map((id) => (
+            <Chip key={id} label={owners.find((o) => o.id === id)?.label ?? String(id)} size="small" onDelete={() => setOwnerFilter((p) => p.filter((x) => x !== id))} />
           ))}
           <Button size="small" onClick={() => { setTeamFilter([]); setOwnerFilter([]); }}
             sx={{ textTransform: "none", fontSize: "0.75rem", py: 0.25 }}>
@@ -219,7 +234,13 @@ function TabPanel({ tab, canApprove, emptyText }: TabPanelProps): JSX.Element {
         </Box>
       )}
 
-      <TableContainer>
+      {total === 0 ? (
+        <Box sx={{ py: 4, textAlign: "center" }}>
+          <Typography variant="body2" color="text.secondary">No matches for the current filters.</Typography>
+        </Box>
+      ) : null}
+
+      <TableContainer sx={{ display: total === 0 ? "none" : undefined }}>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -297,15 +318,17 @@ function TabPanel({ tab, canApprove, emptyText }: TabPanelProps): JSX.Element {
         </Table>
       </TableContainer>
 
-      <TablePagination
-        component="div"
-        count={total}
-        page={page}
-        onPageChange={(_, p) => setPage(p)}
-        rowsPerPage={limit}
-        rowsPerPageOptions={[limit]}
-        sx={{ borderTop: 1, borderColor: "divider" }}
-      />
+      {total > 0 && (
+        <TablePagination
+          component="div"
+          count={total}
+          page={page}
+          onPageChange={(_, p) => setPage(p)}
+          rowsPerPage={limit}
+          rowsPerPageOptions={[limit]}
+          sx={{ borderTop: 1, borderColor: "divider" }}
+        />
+      )}
     </Box>
   );
 }

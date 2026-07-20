@@ -61,6 +61,8 @@ export interface ActionItem {
   dueDate: string;
   team: string;
   processOwner: string;
+  teamId?: number | null;
+  ownerId?: number | null;
 }
 
 export interface OverdueControl {
@@ -73,6 +75,8 @@ export interface OverdueControl {
   dueDate: string;
   team: string;
   processOwner: string;
+  teamId?: number | null;
+  ownerId?: number | null;
 }
 
 export interface DashboardData {

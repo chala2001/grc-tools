@@ -19,7 +19,6 @@ package handler
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/model"
 	auditservice "github.com/wso2-open-operations/grc-tools/apps/grc-platform/backend/internal/audit/service"
@@ -81,11 +80,15 @@ func (h *dashboardHandler) getWorkQueue(w http.ResponseWriter, r *http.Request) 
 	if limit > 100 {
 		limit = 100
 	}
-	if t := q.Get("teams"); t != "" {
-		f.Teams = strings.Split(t, ",")
+	for _, v := range q["teamIds"] {
+		if id, err := strconv.Atoi(v); err == nil {
+			f.TeamIDs = append(f.TeamIDs, id)
+		}
 	}
-	if o := q.Get("owners"); o != "" {
-		f.Owners = strings.Split(o, ",")
+	for _, v := range q["ownerIds"] {
+		if id, err := strconv.Atoi(v); err == nil {
+			f.OwnerIDs = append(f.OwnerIDs, id)
+		}
 	}
 
 	p, err := h.svc.GetWorkQueuePage(r.Context(), f, tab, page, limit)

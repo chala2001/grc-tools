@@ -164,7 +164,22 @@ export interface PopulationDetails {
   teamId?: number | null;
 }
 
-export interface AddControlRequest {
+/** Template-linked: backend resolves controlNumber/description from the framework library row. */
+export interface TemplateLinkedControlRequest {
+  frameworkControlId: number;
+  controlSource: "COPIED";
+  requirementType: RequirementType;
+  controlType: ControlType;
+  scope: ControlScope;
+  dueDate?: string | null;
+  ownerId?: number | null;
+  teamId?: number | null;
+  auditorId?: number | null;
+  population?: PopulationDetails | null;
+}
+
+/** Explicit: caller supplies controlNumber + description directly (MANUAL, CSV, or audit-copy). */
+export interface ExplicitControlRequest {
   controlNumber: string;
   description: string;
   requirementType: RequirementType;
@@ -175,10 +190,11 @@ export interface AddControlRequest {
   ownerId?: number | null;
   teamId?: number | null;
   auditorId?: number | null;
-  frameworkControlId?: number | null;
   controlSource?: ControlSource;
   population?: PopulationDetails | null;
 }
+
+export type AddControlRequest = TemplateLinkedControlRequest | ExplicitControlRequest;
 
 export interface UpdateControlRequest {
   description?: string;

@@ -38,10 +38,10 @@ const SEVERITY_COLOR: Record<AIGap["severity"], string> = {
 };
 
 // Terminal verdict → chip styling + label.
-const VERDICT_STYLE: Record<string, { label: string; color: string; bg: string }> = {
-  PASS: { label: "AI: Looks Complete", color: "#16a34a", bg: "#f0fdf4" },
-  FAIL: { label: "AI: Gaps Found", color: "#dc2626", bg: "#fee2e2" },
-  UNCERTAIN: { label: "AI: Needs Human Review", color: "#b45309", bg: "#fff7ed" },
+const VERDICT_STYLE: Record<string, { label: string; color: string; bg: string; darkBg: string }> = {
+  PASS:      { label: "AI: Looks Complete",      color: "#16a34a", bg: "#f0fdf4", darkBg: "#16a34a33" },
+  FAIL:      { label: "AI: Gaps Found",          color: "#dc2626", bg: "#fee2e2", darkBg: "#dc262633" },
+  UNCERTAIN: { label: "AI: Needs Human Review",  color: "#b45309", bg: "#fff7ed", darkBg: "#b4530933" },
 };
 
 const ADVISORY_SUBMITTER = "AI-generated hint — does not affect review status.";
@@ -75,7 +75,7 @@ export default function AIValidationCard({ auditId, controlId, variant }: AIVali
 
   if (variant === "reviewer") {
     return (
-      <Paper variant="outlined" sx={{ borderRadius: 2, p: 1.75, borderColor: "divider", bgcolor: AI_PURPLE_BG }}>
+      <Paper variant="outlined" sx={{ borderRadius: 2, p: 1.75, borderColor: "divider", bgcolor: AI_PURPLE_BG, "[data-color-scheme='dark'] &": { bgcolor: `${AI_PURPLE}33` } }}>
         {body}
       </Paper>
     );
@@ -101,6 +101,7 @@ export default function AIValidationCard({ auditId, controlId, variant }: AIVali
             height: 30,
             borderRadius: 1.5,
             bgcolor: AI_PURPLE_BG,
+            "[data-color-scheme='dark'] &": { bgcolor: `${AI_PURPLE}33` },
             color: AI_PURPLE,
             display: "flex",
             alignItems: "center",
@@ -117,7 +118,7 @@ export default function AIValidationCard({ auditId, controlId, variant }: AIVali
           <Chip
             size="small"
             label={VERDICT_STYLE[latest.result].label}
-            sx={{ bgcolor: VERDICT_STYLE[latest.result].bg, color: VERDICT_STYLE[latest.result].color, fontWeight: 600 }}
+            sx={{ bgcolor: VERDICT_STYLE[latest.result].bg, "[data-color-scheme='dark'] &": { bgcolor: VERDICT_STYLE[latest.result].darkBg }, color: VERDICT_STYLE[latest.result].color, fontWeight: 600 }}
           />
         )}
       </Box>
@@ -151,6 +152,7 @@ function renderBody(
             borderRadius: 1,
             "& .MuiLinearProgress-bar": { bgcolor: AI_PURPLE },
             bgcolor: AI_PURPLE_BG,
+            "[data-color-scheme='dark'] &": { bgcolor: `${AI_PURPLE}33` },
           }}
         />
         <Typography variant="body2" color="text.secondary">
@@ -182,6 +184,7 @@ function NotValidated(): JSX.Element {
           height: 48,
           borderRadius: "50%",
           bgcolor: AI_PURPLE_BG,
+          "[data-color-scheme='dark'] &": { bgcolor: `${AI_PURPLE}33` },
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -328,7 +331,7 @@ function ReviewerVerdict({ latest }: { latest: AIValidationLog }): JSX.Element {
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
         {style && (
-          <Chip size="small" label={style.label} sx={{ bgcolor: style.bg, color: style.color, fontWeight: 600 }} />
+          <Chip size="small" label={style.label} sx={{ bgcolor: style.bg, "[data-color-scheme='dark'] &": { bgcolor: style.darkBg }, color: style.color, fontWeight: 600 }} />
         )}
         {latest.confidenceScore !== null && (
           <Typography variant="caption" color="text.secondary">

@@ -160,10 +160,6 @@ export default function PhaseDonut({ data, onPhaseClick }: PhaseDonutProps): JSX
           })}
         </Box>
 
-        {mode === "phase" && onPhaseClick && (
-          <Typography variant="caption" color="text.secondary">
-          </Typography>
-        )}
       </Box>
     </Box>
   );

@@ -476,8 +476,6 @@ export default function AuditsListPage(): JSX.Element {
             </Box>
           ) : (
             <>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              </Typography>
               <Box
                 sx={{
                   display: "grid",
