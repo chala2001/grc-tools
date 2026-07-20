@@ -7,6 +7,7 @@ local Runner authenticate this way (the Runner logs into Asgardeo directly —
 see runner/wso2_runner/oauth.py).
 """
 import hashlib
+import logging
 import time
 
 import httpx
@@ -14,6 +15,8 @@ from fastapi import HTTPException, Request, status
 from pydantic import BaseModel
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 _USERINFO_URL = f"https://api.asgardeo.io/t/{settings.ASGARDEO_ORG}/oauth2/userinfo"
 
@@ -103,14 +106,18 @@ async def get_current_user(request: Request) -> User:
                         headers={"Authorization": f"Bearer {token}"},
                     )
             except httpx.HTTPError as exc:
-                print(f"[auth] userinfo call errored: {exc!r}")
+                logger.warning("userinfo call errored: %r", exc)
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Could not reach Asgardeo to validate this token — try again.",
                 )
 
             if resp.status_code != 200:
-                print(f"[auth] userinfo call failed: HTTP {resp.status_code} — {resp.text[:500]}")
+                logger.warning(
+                    "userinfo call failed: HTTP %s — %s",
+                    resp.status_code,
+                    resp.text[:500],
+                )
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Not authenticated. Please log in.",
@@ -122,7 +129,7 @@ async def get_current_user(request: Request) -> User:
         email = (info.get("email") or info.get("sub") or "").strip()
         if email:
             return User(email=email, role=_role_for(email, claims=info))
-        print(f"[auth] userinfo 200 but no email/sub in response: {info}")
+        logger.warning("userinfo 200 but no email/sub in response: %r", info)
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
