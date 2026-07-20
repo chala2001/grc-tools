@@ -138,6 +138,23 @@ def test_post_result_puts_body_on_the_task_result_endpoint():
     assert json.loads(req.content) == result
 
 
+def test_pause_poll_hits_endpoint_and_returns_dict():
+    requests: list = []
+    c = _client_recording_into(
+        requests,
+        lambda req: httpx.Response(200, json={"resume_requested": True, "cancelled": False}),
+    )
+
+    result = _run(c.pause_poll(11))
+    _run(c.aclose())
+
+    assert result == {"resume_requested": True, "cancelled": False}
+    (req,) = requests
+    assert req.method == "POST"
+    assert req.url.path == "/api/agent/tasks/11/pause-poll"
+    assert req.headers["Authorization"] == "Bearer test-token"
+
+
 def test_upload_screenshot_posts_multipart_and_returns_url_and_name(tmp_path: Path):
     requests: list = []
     c = _client_recording_into(
