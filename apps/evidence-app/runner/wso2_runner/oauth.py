@@ -208,7 +208,8 @@ def get_access_token(
                 tokens.setdefault("refresh_token", refresh_token)
                 _save_cache(tokens)
                 return tokens["access_token"]
-            except Exception:
+            except Exception as e:
+                print(f"[runner] token refresh failed ({e!r}); falling back to interactive login")
                 pass  # refresh token expired/invalid — fall through to interactive login
 
     tokens = _login_interactive(org, client_id, login_hint)

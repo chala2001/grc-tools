@@ -174,6 +174,9 @@ async def _run_task(task: dict, client: CloudClient) -> None:
         await client.post_result(task["id"], result)
         return
 
+    # No merged backend route emits kind == "reset" yet — it's produced by the
+    # web app's reset-session control, which lands in a later PR. The handler
+    # ships ahead of its emitter so the Runner is ready when that PR merges.
     if task.get("kind") == "reset":
         result = await reset_browser()
         await client.post_result(task["id"], result)
@@ -195,7 +198,7 @@ async def _run_task(task: dict, client: CloudClient) -> None:
             if not local_path or not local_path.exists():
                 continue
             try:
-                file_url, file_name = await client.upload_screenshot(task["id"], local_path)
+                file_url, file_name = await client.upload_screenshot(local_path)
                 states[idx]["screenshots"].append({
                     "file_name": file_name,
                     "file_url": file_url,

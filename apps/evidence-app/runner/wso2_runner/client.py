@@ -74,7 +74,7 @@ class CloudClient:
         r.raise_for_status()
         return r.json()
 
-    async def upload_screenshot(self, task_id: int, local_path: Path) -> tuple[str, str]:
+    async def upload_screenshot(self, local_path: Path) -> tuple[str, str]:
         """Upload an evidence file (screenshot PNG or PDF) to backend.
         Returns (file_url, file_name)."""
         content_type = mimetypes.guess_type(local_path.name)[0] or "application/octet-stream"
@@ -82,7 +82,6 @@ class CloudClient:
             r = await self._http.post(
                 f"{self.base}/api/agent/upload-screenshot",
                 files={"file": (local_path.name, f, content_type)},
-                params={"task_id": task_id},
                 headers=self._auth_headers(),
             )
         r.raise_for_status()

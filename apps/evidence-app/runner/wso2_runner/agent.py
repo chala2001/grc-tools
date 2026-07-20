@@ -1627,7 +1627,11 @@ def _get_browser() -> BrowserSession:
 
 async def reset_browser() -> dict:
     """Kill the cached BrowserSession so the next login starts a fresh window
-    (recovery path for a stuck/crashed browser)."""
+    (recovery path for a stuck/crashed browser).
+
+    Invoked for Agent Task kind == "reset", which is emitted by the web app's
+    reset-session control (arriving in the web app PR) — this handler ships
+    ahead of its emitter."""
     global _browser
     if _browser is not None:
         try:

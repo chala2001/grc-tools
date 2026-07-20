@@ -166,14 +166,13 @@ def test_upload_screenshot_posts_multipart_and_returns_url_and_name(tmp_path: Pa
     shot = tmp_path / "shot.png"
     shot.write_bytes(b"\x89PNG\r\n\x1a\n fake png bytes")
 
-    file_url, file_name = _run(c.upload_screenshot(3, shot))
+    file_url, file_name = _run(c.upload_screenshot(shot))
     _run(c.aclose())
 
     assert (file_url, file_name) == ("/uploads/abc.png", "abc.png")
     (req,) = requests
     assert req.method == "POST"
     assert req.url.path == "/api/agent/upload-screenshot"
-    assert req.url.params["task_id"] == "3"
     assert req.headers["content-type"].startswith("multipart/form-data")
 
 
