@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/usage", tags=["Usage"])
 
 
 def _now_utc() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
 def _aggregate(db: Session, since: datetime | None = None) -> dict:
@@ -47,7 +47,7 @@ def _aggregate(db: Session, since: datetime | None = None) -> dict:
 @router.get("/summary", response_model=UsageSummary)
 def usage_summary(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     now = _now_utc()
-    today_start = datetime(now.year, now.month, now.day)
+    today_start = datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
 
     total = _aggregate(db)
     last_7 = _aggregate(db, since=now - timedelta(days=7))
@@ -81,7 +81,7 @@ def usage_timeseries(
     """One bucket per calendar day for the last ``days`` days.
     Days with no runs are returned with zeros so the chart line stays continuous."""
     now = _now_utc()
-    since = datetime(now.year, now.month, now.day) - timedelta(days=days - 1)
+    since = datetime(now.year, now.month, now.day, tzinfo=timezone.utc) - timedelta(days=days - 1)
 
     rows = (
         db.query(
