@@ -14,20 +14,27 @@ echo "  WSO2 Compliance Runner — Installer"
 echo "================================================"
 echo ""
 
-# 1. Check Python 3.11
-if ! command -v python3.11 &>/dev/null; then
-    echo "ERROR: Python 3.11 not found."
+# 1. Check for a Python >= 3.11 interpreter
+PYTHON_CMD=""
+for candidate in python3.11 python3.12 python3.13 python3 python; do
+    if command -v "$candidate" &>/dev/null && "$candidate" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' &>/dev/null; then
+        PYTHON_CMD="$candidate"
+        break
+    fi
+done
+if [ -z "$PYTHON_CMD" ]; then
+    echo "ERROR: Python >= 3.11 not found."
     echo "Install it first:"
     echo "  Ubuntu/Debian: sudo apt install python3.11 python3.11-venv -y"
     echo "  macOS:         brew install python@3.11"
     exit 1
 fi
-echo "[1/4] Python 3.11 found: $(python3.11 --version)"
+echo "[1/4] Python found: $("$PYTHON_CMD" --version) ($PYTHON_CMD)"
 
 # 2. Create venv in ~/.wso2-runner/venv
 VENV_DIR="$HOME/.wso2-runner/venv"
 echo "[2/4] Creating virtual environment at $VENV_DIR ..."
-python3.11 -m venv "$VENV_DIR"
+"$PYTHON_CMD" -m venv "$VENV_DIR"
 
 # 3. Install the runner package
 echo "[3/4] Installing wso2-runner ..."
