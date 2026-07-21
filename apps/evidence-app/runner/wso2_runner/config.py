@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Config lives in the user's home dir — works whether installed via pip or cloned.
 # The repo's runner/.env (if present) is loaded first so a clone with that file
@@ -53,9 +53,10 @@ class RunnerSettings(BaseSettings):
     # 1 = primary/laptop screen, 2 = external monitor (if connected).
     SCREENSHOT_MONITOR: int = 1
 
-    class Config:
-        env_file = (str(_REPO_ENV_FILE), str(CONFIG_FILE))
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=(str(_REPO_ENV_FILE), str(CONFIG_FILE)),
+        extra="ignore",
+    )
 
 
 settings = RunnerSettings()
