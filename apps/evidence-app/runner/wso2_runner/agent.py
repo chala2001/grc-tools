@@ -560,7 +560,9 @@ def _capture_os_screenshot() -> bytes:
             clean_env[key] = val
     clean_env["PATH"] = "/usr/bin:/usr/local/bin:/bin"
 
-    tmp = Path(tempfile.mktemp(suffix=".png"))
+    fd, tmp_path = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    tmp = Path(tmp_path)
     try:
         subprocess.run(
             ["gnome-screenshot", "-f", str(tmp)],
