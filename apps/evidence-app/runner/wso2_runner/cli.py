@@ -77,7 +77,7 @@ def configure():
 
 @app.command()
 def start(
-    email: str = typer.Argument(None, help="Your WSO2 email, e.g. wso2-runner chalaka@wso2.com — used as a login_hint for the Asgardeo sign-in page"),
+    email: str = typer.Argument(None, help="Your WSO2 email, e.g. wso2-runner start your@wso2.com — used as a login_hint for the Asgardeo sign-in page"),
     server: str = typer.Option(None, "--server", "-s", help="Cloud backend URL (default: http://localhost:8000)"),
     user: str = typer.Option(None, "--user", "-u", help="Same as the positional email argument"),
     interval: float = typer.Option(None, "--interval", "-i", help="Poll interval in seconds (default: 2.0)"),
