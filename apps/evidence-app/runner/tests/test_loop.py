@@ -378,3 +378,62 @@ def test_run_task_progress_and_pause_callbacks_report_to_the_backend(monkeypatch
     (task_id, result), = calls["post_result"]
     assert task_id == 7
     assert result["status"] == "completed"
+
+
+def test_successful_screenshot_upload_deletes_the_local_file(monkeypatch, tmp_path):
+    """Ticket #39: once a captured screenshot has been uploaded successfully,
+    its local copy under ~/.wso2-runner/ must be removed so Evidence doesn't
+    accumulate on disk. Uses a real temp file so the assertion is against
+    actual filesystem state, not a mock call."""
+    run_task = {"id": 20, "kind": "run", "prompt": "click around"}
+    calls = {}
+    monkeypatch.setattr(loop, "CloudClient", _make_fake_client_class([run_task], calls))
+
+    shot = tmp_path / "shot.png"
+    shot.write_bytes(b"fake png bytes")
+    assert shot.exists()  # sanity check before the run
+
+    async def fake_execute_task(task, on_subtask_done, on_pause):
+        states = [{"text": "Click the button", "screenshots": []}]
+        await on_subtask_done(states, 0, [shot], {"tokens": 1})
+        return {"status": "completed", "result": "done", "error": None, "screenshots": states[0]["screenshots"]}
+
+    monkeypatch.setattr(loop, "execute_task", fake_execute_task)
+
+    _run_bounded(loop.run_forever(cloud_url="https://cloud.example", poll_interval=0))
+
+    assert calls["upload_screenshot"] == [shot]
+    assert not shot.exists()
+
+
+def test_failed_screenshot_upload_keeps_the_local_file(monkeypatch, tmp_path):
+    """Ticket #39: if upload_screenshot raises (e.g. a transient network
+    error), the local file must NOT be deleted — otherwise a failed upload
+    would permanently lose the captured Evidence instead of leaving it to
+    retry or be recovered manually."""
+    run_task = {"id": 21, "kind": "run", "prompt": "click around"}
+    calls = {}
+    base_client = _make_fake_client_class([run_task], calls)
+
+    class FailingUploadClient(base_client):
+        async def upload_screenshot(self, local_path):
+            calls.setdefault("upload_screenshot", []).append(local_path)
+            raise RuntimeError("upload failed: connection reset")
+
+    monkeypatch.setattr(loop, "CloudClient", FailingUploadClient)
+
+    shot = tmp_path / "shot.png"
+    shot.write_bytes(b"fake png bytes")
+    assert shot.exists()  # sanity check before the run
+
+    async def fake_execute_task(task, on_subtask_done, on_pause):
+        states = [{"text": "Click the button", "screenshots": []}]
+        await on_subtask_done(states, 0, [shot], {"tokens": 1})
+        return {"status": "completed", "result": "done", "error": None, "screenshots": states[0]["screenshots"]}
+
+    monkeypatch.setattr(loop, "execute_task", fake_execute_task)
+
+    _run_bounded(loop.run_forever(cloud_url="https://cloud.example", poll_interval=0))
+
+    assert calls["upload_screenshot"] == [shot]
+    assert shot.exists()

@@ -211,6 +211,7 @@ async def _run_task(task: dict, client: CloudClient) -> None:
                 print(f"[runner]   subtask {idx + 1}: screenshot {i + 1} upload failed: {exc}")
                 continue
 
+            local_path.unlink(missing_ok=True)
             uploaded_any = True
             # Post progress after every screenshot so the UI shows them one by one
             try:
