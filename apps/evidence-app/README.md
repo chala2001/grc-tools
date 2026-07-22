@@ -13,7 +13,7 @@ screenshots, and store them as evidence linked to compliance controls.
 | [`webapp/`](webapp) | React + TypeScript single-page app (Vite, MUI) | Choreo (web app) |
 | [`runner/`](runner) | `wso2-runner` local browser-automation agent | Engineer's machine |
 
-```
+```text
 webapp (React/Vite)  ──▶  backend (FastAPI)  ──▶  PostgreSQL (Neon)
                                  ▲                 Azure Blob (evidence)
                                  │
