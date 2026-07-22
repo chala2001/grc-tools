@@ -14,10 +14,14 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY --from=builder /app/dist ./dist
-COPY package.json ./
-COPY index.js ./
+RUN addgroup -S app && adduser -S app -G app
+
+COPY --from=builder --chown=app:app /app/dist ./dist
+COPY --chown=app:app package.json ./
+COPY --chown=app:app index.js ./
 
 EXPOSE 8080
+
+USER app
 
 CMD ["node", "index.js"]
