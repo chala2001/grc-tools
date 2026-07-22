@@ -7,9 +7,22 @@ import GlobalStyles from "@mui/material/GlobalStyles";
 import { AuthProvider } from "@asgardeo/auth-react";
 import App from "./App.tsx";
 
+const asgardeoClientID = import.meta.env.VITE_ASGARDEO_CLIENT_ID;
+const asgardeoBaseUrl = import.meta.env.VITE_ASGARDEO_BASE_URL;
+
+if (!asgardeoClientID || !asgardeoBaseUrl) {
+  const missing = [
+    !asgardeoClientID && "VITE_ASGARDEO_CLIENT_ID",
+    !asgardeoBaseUrl && "VITE_ASGARDEO_BASE_URL",
+  ]
+    .filter(Boolean)
+    .join(", ");
+  throw new Error(`Missing required environment variable(s): ${missing}`);
+}
+
 const authConfig = {
-  clientID: import.meta.env.VITE_ASGARDEO_CLIENT_ID ?? "am_j4pZMSVr_PRm3EIZ9V6UOxNwa",
-  baseUrl: import.meta.env.VITE_ASGARDEO_BASE_URL ?? "https://api.asgardeo.io/t/gvgj",
+  clientID: asgardeoClientID,
+  baseUrl: asgardeoBaseUrl,
   signInRedirectURL: window.location.origin,
   signOutRedirectURL: window.location.origin,
   scope: ["openid", "profile", "email", "groups"],
