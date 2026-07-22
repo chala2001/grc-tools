@@ -1,7 +1,8 @@
 import axios from "axios";
 
-// Upload URLs are served via the Node.js proxy as relative /uploads/...
-// No cross-origin rewriting needed.
+// Evidence file URLs come from the backend as short-lived Azure signed
+// links (absolute URLs pointing directly at blob storage) and are used
+// as-is in <img> src with no Authorization header, so this is an identity pass-through.
 export const getFileUrl = (fileUrl: string): string => fileUrl;
 
 export const api = axios.create({
