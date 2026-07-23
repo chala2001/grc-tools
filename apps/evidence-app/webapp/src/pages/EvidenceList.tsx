@@ -275,6 +275,12 @@ export default function EvidenceList() {
       : [{ id: galleryEvidence.id, file_name: galleryEvidence.file_name, file_url: galleryEvidence.file_url }];
   }, [galleryEvidence]);
 
+  // When an evidence record has no stored EvidenceFile rows, galleryFiles above
+  // synthesizes a single entry whose `id` is the *Evidence* id, not a file id.
+  // Deleting that would send an Evidence id to /evidence/files/{id}, so the
+  // per-file delete control is hidden for the synthesized fallback.
+  const galleryHasStoredFiles = !!(galleryEvidence?.files && galleryEvidence.files.length > 0);
+
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
@@ -815,6 +821,7 @@ export default function EvidenceList() {
                         </Button>
                       </Stack>
                     ) : (
+                      galleryHasStoredFiles &&
                       (isAdmin || galleryEvidence?.created_by === user?.email) && (
                         <Tooltip title="Delete this screenshot">
                           <IconButton
