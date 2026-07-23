@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -15,6 +15,7 @@ import ProductPicker from "../components/ProductPicker";
 import FrameworkPicker from "../components/FrameworkPicker";
 
 export default function SubmitEvidence() {
+  const queryClient = useQueryClient();
   const [productId, setProductId] = useState<number | "">("");
   const [frameworkId, setFrameworkId] = useState<number | "">("");
   const [controlId, setControlId] = useState<number | "">("");
@@ -27,6 +28,8 @@ export default function SubmitEvidence() {
     mutationFn: evidenceApi.create,
     onSuccess: () => {
       setSuccess(true);
+      queryClient.invalidateQueries({ queryKey: ["evidence"] });
+      queryClient.invalidateQueries({ queryKey: ["submissions"] });
       setTitle("");
       setDescription("");
       setFile(null);
