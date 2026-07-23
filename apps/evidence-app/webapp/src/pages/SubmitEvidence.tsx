@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
@@ -35,6 +36,11 @@ export default function SubmitEvidence() {
     },
   });
 
+  const uploadError = mutation.isError
+    ? (mutation.error as AxiosError<{ detail?: string }>)?.response?.data?.detail ||
+      "Upload failed. Please check the file and try again."
+    : null;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!file || !controlId) return;
@@ -65,6 +71,12 @@ export default function SubmitEvidence() {
           sx={{ mb: 3 }}
         >
           Evidence submitted successfully.
+        </Alert>
+      )}
+
+      {uploadError && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {uploadError}
         </Alert>
       )}
 
