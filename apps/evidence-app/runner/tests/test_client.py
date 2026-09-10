@@ -20,6 +20,7 @@ import httpx
 import pytest
 
 from wso2_runner.client import CloudClient
+from wso2_runner.config import USER_AGENT
 
 
 @pytest.fixture(autouse=True)
@@ -56,6 +57,16 @@ def test_init_strips_trailing_slash():
     """The base URL is normalised so endpoint building never doubles a slash."""
     c = CloudClient("https://backend.example/", "org", "cid")
     assert c.base == "https://backend.example"
+    _run(c.aclose())
+
+
+def test_init_sets_user_agent_as_a_client_default():
+    """Production's edge 403s a request without the curl/ token in its
+    User-Agent (spec chala2001/grc-tools#133) — pin that the real __init__ (not the
+    __new__-built test double above) sets it as an httpx client default, so
+    every one of the six task-queue calls carries it without repeating it."""
+    c = CloudClient("https://backend.example", "org", "cid")
+    assert c._http.headers["User-Agent"] == USER_AGENT
     _run(c.aclose())
 
 
