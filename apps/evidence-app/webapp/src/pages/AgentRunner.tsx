@@ -524,7 +524,7 @@ export default function AgentRunner() {
     }
   };
 
-  const handleQueue = async (e: React.FormEvent) => {
+  const handleQueue = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     // Refuses whenever the primary button itself would refuse — including
     // once a task has finished, when the button's face has moved on to New
@@ -1012,15 +1012,25 @@ export default function AgentRunner() {
             </Alert>
           )}
 
-          {/* type/onClick depend on the face this control is showing: a
-              submit button while it's offering to queue (so Enter in the
-              form and a press both route through handleQueue), but an
-              ordinary button when it's offering New Task, so a press can't
-              fall through to the form's submit event. See
-              chala2001/grc-tools#139. */}
+          {/* Never a submit button, in either face. It used to be one while
+              offering to queue, and an ordinary button while offering New
+              Task — but the face changes DURING the click: pressing New
+              Task clears the task, which makes the form queueable again,
+              and React had swapped the type back to "submit" before the
+              browser finished handling the press, so the browser then
+              submitted the form and re-queued the prompt. Dispatching from
+              onClick instead removes that whole class of bug, and the
+              preventDefault is a second lock so a future edit that
+              reintroduces type="submit" still can't bring it back. The form
+              keeps its own onSubmit, so Enter in a single line field
+              behaves exactly as before. See chala2001/grc-tools#139. */}
           <Button
-            type={formState.primaryAction === "newTask" ? "button" : "submit"}
-            onClick={formState.primaryAction === "newTask" ? handleNewTask : undefined}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              if (formState.primaryAction === "newTask") handleNewTask();
+              else void handleQueue(e);
+            }}
             variant="contained"
             size="large"
             disabled={!formState.primaryActionEnabled}

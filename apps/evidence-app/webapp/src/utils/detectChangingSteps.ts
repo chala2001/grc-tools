@@ -1,70 +1,86 @@
-// The verb groups a step's leading word can fall into. Kept as a union
-// rather than a bare string so a typo in a call site is a compile error, not
-// a silent no-match.
+// The verb groups a step can fall into. Kept as a union rather than a bare
+// string so a typo in a call site is a compile error, not a silent no-match.
 export type ChangingVerbGroup = "deletion" | "update" | "rename" | "creation" | "access change";
 
 type ChangingVerbGroupRow = {
   group: ChangingVerbGroup;
-  verbs: string[];
+  // Present tense stems. Their other forms are generated below, so a row
+  // never has to list "deletes", "deleted" and "deleting" by hand.
+  stems: string[];
 };
 
 // One row per group of changing verbs the Agent Runner should pause on.
-// Deliberately short — see chala2001/grc-tools#136: a missing verb is a one
-// line addition with its own test row, but a table padded out on day one
-// trains an Engineer to stop reading the banner. Only the leading word of a
-// step is ever checked against these (see detectChangingSteps below), so a
-// verb only needs to be here if it is unambiguous as the FIRST word of an
-// instruction — a word that shows up harmlessly mid sentence in ordinary
-// Evidence prompts ("screenshot the delete protection setting") is never a
-// problem, because that occurrence is never in leading position.
+//
+// These are matched ANYWHERE in a step, not only as its first word — see
+// chala2001/grc-tools#136. An earlier version read the leading verb only, on
+// the reasoning that "screenshot the delete protection setting" is an
+// ordinary Evidence prompt and should stay silent. That reasoning holds if
+// the warning BLOCKS. It does not: the warning is a banner and a tick box,
+// and the Engineer always gets through. So a false positive costs one tick
+// and a miss costs a deleted resource, which is a lopsided enough trade that
+// matching everywhere is the safer rule. It is also a rule an Engineer can
+// predict without reading this file, which is worth a great deal on its own.
+//
+// Matching everywhere is what makes the awkward phrasings work: "1.delete"
+// with no space after the marker, "find the key vault and delete", "please
+// delete the account", "deleting the account". Each of those slipped past
+// the leading word rule.
 const CHANGING_VERB_GROUPS: ChangingVerbGroupRow[] = [
   {
     group: "deletion",
-    // "delete" and "remove" both name outright destruction with no
-    // reasonable second meaning in console work. Rarer synonyms ("erase",
-    // "wipe", "purge") are left out for the first version — add one only
-    // once it has its own test row.
-    verbs: ["delete", "remove"],
+    // Outright destruction. Rarer synonyms ("erase", "wipe", "purge",
+    // "terminate", "destroy") are left out for now — add one with its own
+    // test row when a real prompt wants it.
+    stems: ["delete", "remove"],
   },
   {
     group: "update",
-    // "update" changes something in place. "modify" and "change" are left
-    // out: both turn up constantly in ordinary descriptive text ("change
-    // the filter", "modify the view") without naming a console mutation.
-    verbs: ["update"],
+    // Changing something in place. "modify" and "change" are left out: both
+    // turn up constantly in ordinary descriptive text without naming a
+    // console mutation, and matching everywhere makes that cost real.
+    stems: ["update"],
   },
   {
     group: "rename",
-    // "rename" only. Unambiguous on its own and has no common alternate
-    // meaning in console work.
-    verbs: ["rename"],
+    stems: ["rename"],
   },
   {
     group: "creation",
-    // "create" only. "add" is left out: it is used loosely for all sorts of
-    // non mutating things ("add a bookmark", "add to the list") and would
-    // false positive too often as a leading word.
-    verbs: ["create"],
+    // "add" is deliberately absent: it is used loosely for all sorts of non
+    // mutating things ("add a bookmark", "add to the list"), and now that
+    // matching is everywhere it would fire on far too much.
+    stems: ["create"],
   },
   {
     group: "access change",
-    // "grant" and "revoke" hand out or take away access outright. "disable"
-    // is included because disabling a policy or a protection setting is the
-    // same kind of change. "enable" is left out for the first version: it is
-    // also used for turning on read only things like logging or
-    // diagnostics, which is a weaker signal.
-    verbs: ["grant", "revoke", "disable"],
+    // Handing out, taking away or switching off access. "enable" is left
+    // out: it is also used for turning on read only things like logging.
+    stems: ["grant", "revoke", "disable"],
   },
 ];
 
-// One flat lookup from verb to group, built once at module load rather than
-// scanning every row for every step.
-const VERB_TO_GROUP = new Map<string, ChangingVerbGroup>();
-for (const row of CHANGING_VERB_GROUPS) {
-  for (const verb of row.verbs) {
-    VERB_TO_GROUP.set(verb, row.group);
-  }
+// Present tense, third person, past and continuous. A stem ending in "e"
+// drops it before "ing" ("delete" gives "deleting", not "deleteing") and
+// takes a bare "d" for the past ("deleted"), which covers every stem above.
+function wordForms(stem: string): string[] {
+  const endsInE = stem.endsWith("e");
+  return [
+    stem,
+    `${stem}s`,
+    endsInE ? `${stem}d` : `${stem}ed`,
+    `${endsInE ? stem.slice(0, -1) : stem}ing`,
+  ];
 }
+
+// One regex per group, built once at module load. \b on both sides keeps a
+// form from matching inside a longer word, so "undelete" and "deletion" do
+// not trip the deletion row.
+const GROUP_PATTERNS: { group: ChangingVerbGroup; regex: RegExp }[] = CHANGING_VERB_GROUPS.map(
+  (row) => ({
+    group: row.group,
+    regex: new RegExp(`\\b(?:${row.stems.flatMap(wordForms).join("|")})\\b`, "i"),
+  })
+);
 
 export type ChangingStepFlag = {
   // 1 based, matching the numbers the page already shows next to the
@@ -73,31 +89,22 @@ export type ChangingStepFlag = {
   group: ChangingVerbGroup;
 };
 
-// A step's own leading word: the first run of letters on its first line,
-// lower cased for a case insensitive, whole word match against the verb
-// table. A multi line step (the page joins a wrapped subtask with "\n")
-// only ever has its first line's first word considered.
-function leadingWord(step: string): string {
-  const firstLine = step.split("\n", 1)[0] ?? "";
-  const match = firstLine.trim().match(/^[A-Za-z]+/);
-  return match ? match[0].toLowerCase() : "";
-}
-
 /**
- * Looks at each already parsed subtask and says which ones read as an
- * instruction to change something, rather than to look at something. Takes
- * the same subtask list the Agent Runner page already parses out of the
- * prompt and renders as its numbered list, so a step number named here is
- * always a step number that exists on screen — see
- * chala2001/grc-tools#140.
+ * Looks at each already parsed subtask and says which ones mention changing
+ * something rather than only looking at it. Takes the same subtask list the
+ * Agent Runner page already parses out of the prompt and renders as its
+ * numbered list, so a step number named here is always a step number that
+ * exists on screen — see chala2001/grc-tools#140.
  *
- * The rule is one word: the verb a step STARTS with. A changing word
- * appearing later in a step is ignored, which is what keeps an ordinary
- * capture prompt like "Screenshot the delete protection setting" silent. A
- * step with no leading verb from the table at all — including a step that
- * only navigates and filters, with no capture verb of its own — is also
- * silent, on purpose: see chala2001/grc-tools#136 for why a "must contain a
- * capture verb" rule was considered and rejected.
+ * A step is flagged when any form of a changing verb appears anywhere in it.
+ * That deliberately includes ordinary capture prompts that merely name a
+ * delete policy or an update history: they raise the banner, the Engineer
+ * ticks the box once, and nothing is ever refused. See the comment on
+ * CHANGING_VERB_GROUPS above for why that trade is the right way round.
+ *
+ * A step matching more than one group reports the first group in table
+ * order, because the banner only needs to say what kind of change it saw,
+ * not enumerate every one.
  *
  * Plain data in, plain data out — no React, no knowledge of how any of this
  * is drawn.
@@ -105,9 +112,9 @@ function leadingWord(step: string): string {
 export function detectChangingSteps(subtasks: string[]): ChangingStepFlag[] {
   const flagged: ChangingStepFlag[] = [];
   subtasks.forEach((step, index) => {
-    const group = VERB_TO_GROUP.get(leadingWord(step));
-    if (group) {
-      flagged.push({ stepNumber: index + 1, group });
+    const hit = GROUP_PATTERNS.find((p) => p.regex.test(step));
+    if (hit) {
+      flagged.push({ stepNumber: index + 1, group: hit.group });
     }
   });
   return flagged;

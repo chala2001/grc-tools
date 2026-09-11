@@ -1,111 +1,111 @@
 import { describe, expect, test } from "vitest";
 import { detectChangingSteps } from "./detectChangingSteps";
 
+// Shorthand: "3:deletion" reads better in a failure than a nested object.
+const flags = (subtasks: string[]) =>
+  detectChangingSteps(subtasks).map((f) => `${f.stepNumber}:${f.group}`);
+
 describe("detectChangingSteps", () => {
-  test("a step whose leading verb changes something is flagged", () => {
-    const flagged = detectChangingSteps(["Delete the test storage account"]);
-
-    expect(flagged).toEqual([{ stepNumber: 1, group: "deletion" }]);
+  test("a step that is only a changing verb is flagged", () => {
+    expect(flags(["delete"])).toEqual(["1:deletion"]);
+    expect(flags(["update"])).toEqual(["1:update"]);
   });
 
-  test("a step that merely contains a changing word later is not flagged", () => {
-    const flagged = detectChangingSteps(["Screenshot the delete protection setting"]);
-
-    expect(flagged).toEqual([]);
+  test("a step with no list marker space is still flagged", () => {
+    // The prompt parser needs a space after "1." to split a list item, so a
+    // prompt typed as "1.delete" arrives here as one step still carrying its
+    // marker. Matching anywhere is what makes that work.
+    expect(flags(["1.delete"])).toEqual(["1:deletion"]);
+    expect(flags(["2)remove the bucket"])).toEqual(["1:deletion"]);
   });
 
-  test("a step that only navigates and filters, with no capture verb, is not flagged", () => {
-    const flagged = detectChangingSteps(['Go to Key Vaults, filter by label "env:prod"']);
-
-    expect(flagged).toEqual([]);
+  test("a changing verb at the end of a step is flagged", () => {
+    expect(flags(["find chalaka123 key vaults and delete"])).toEqual(["1:deletion"]);
+    expect(flags(["go to the resource group, then remove it"])).toEqual(["1:deletion"]);
   });
 
-  test("a single line prompt with no numbering is assessed like any other step", () => {
-    const flagged = detectChangingSteps(["Delete the test user"]);
-
-    expect(flagged).toEqual([{ stepNumber: 1, group: "deletion" }]);
+  test("a changing verb after a polite opening is flagged", () => {
+    expect(flags(["Please delete the test account"])).toEqual(["1:deletion"]);
   });
 
-  test("several flagged steps return all of them with the right numbers", () => {
-    const flagged = detectChangingSteps([
-      "Go to Key Vaults, filter by label env:prod",
-      "Delete the test storage account",
-      "Screenshot the access policy",
-      "Rename the resource group to archive",
-    ]);
+  test("every word form of a verb is flagged", () => {
+    expect(flags(["delete it"])).toEqual(["1:deletion"]);
+    expect(flags(["deletes it"])).toEqual(["1:deletion"]);
+    expect(flags(["deleted it"])).toEqual(["1:deletion"]);
+    expect(flags(["deleting it"])).toEqual(["1:deletion"]);
+  });
 
-    expect(flagged).toEqual([
-      { stepNumber: 2, group: "deletion" },
-      { stepNumber: 4, group: "rename" },
-    ]);
+  test("case does not matter", () => {
+    expect(flags(["DELETE the test user"])).toEqual(["1:deletion"]);
+    expect(flags(["Delete the test user"])).toEqual(["1:deletion"]);
+  });
+
+  test("one case per verb group", () => {
+    expect(flags(["delete the vault"])).toEqual(["1:deletion"]);
+    expect(flags(["remove the vault"])).toEqual(["1:deletion"]);
+    expect(flags(["update the policy"])).toEqual(["1:update"]);
+    expect(flags(["rename the group"])).toEqual(["1:rename"]);
+    expect(flags(["create a new bucket"])).toEqual(["1:creation"]);
+    expect(flags(["grant reader to the group"])).toEqual(["1:access change"]);
+    expect(flags(["revoke the key"])).toEqual(["1:access change"]);
+    expect(flags(["disable the protection setting"])).toEqual(["1:access change"]);
+  });
+
+  test("an ordinary capture prompt is silent", () => {
+    expect(flags(["Go to Key Vault X and screenshot the access policy"])).toEqual([]);
+    expect(flags(["Go to S3, find bucket cloudcare-k8s, screenshot the objects list"])).toEqual([]);
+    expect(flags(["find India cricket"])).toEqual([]);
+  });
+
+  test("the application's own example prompts are silent", () => {
+    // Both come from the help text the Agent Runner page shows. If either
+    // ever starts warning, the page is teaching the banner to be ignored.
+    expect(
+      flags(['Go to Key Vaults, filter by label "env:prod"', "EACH-PAGE: Screenshot page {page} of the filtered results"])
+    ).toEqual([]);
+    expect(
+      flags(["PDF: Open https://github.com/org/repo/issues/123, expand all comments, then export as PDF"])
+    ).toEqual([]);
+  });
+
+  test("a capture prompt that merely names a delete setting IS flagged, on purpose", () => {
+    // This is the deliberate cost of matching everywhere. The Engineer ticks
+    // the box once. Missing a real deletion costs a resource; this costs a
+    // click. See the module comment.
+    expect(flags(["Screenshot the delete protection setting"])).toEqual(["1:deletion"]);
+    expect(flags(["Screenshot the update history for this resource"])).toEqual(["1:update"]);
+  });
+
+  test("a verb inside a longer word is not flagged", () => {
+    expect(flags(["undelete the row"])).toEqual([]);
+    expect(flags(["screenshot the deletion policy page"])).toEqual([]);
+    expect(flags(["open the creation date column"])).toEqual([]);
+  });
+
+  test("several flagged steps come back with the right numbers", () => {
+    expect(
+      flags([
+        "Go to S3, screenshot objects",
+        "Delete the old bucket",
+        "Screenshot the results",
+        "rename the group",
+      ])
+    ).toEqual(["2:deletion", "4:rename"]);
   });
 
   test("nothing flagged returns an empty result", () => {
-    const flagged = detectChangingSteps([
-      "Go to S3, find bucket cloudcare-k8s, screenshot the objects list",
-      "Go to EC2, find instance cloud-care, screenshot the details page",
-    ]);
-
-    expect(flagged).toEqual([]);
+    expect(flags(["screenshot the page", "export it as a PDF"])).toEqual([]);
   });
 
-  test("deletion group — delete and remove", () => {
-    expect(detectChangingSteps(["Delete the test storage account"])).toEqual([
-      { stepNumber: 1, group: "deletion" },
-    ]);
-    expect(detectChangingSteps(["Remove the old firewall rule"])).toEqual([
-      { stepNumber: 1, group: "deletion" },
-    ]);
+  test("no steps at all returns an empty result", () => {
+    expect(flags([])).toEqual([]);
   });
 
-  test("update group", () => {
-    expect(detectChangingSteps(["Update the retention policy to 90 days"])).toEqual([
-      { stepNumber: 1, group: "update" },
-    ]);
+  test("a step matching two groups reports the first in table order", () => {
+    expect(flags(["delete and rename the group"])).toEqual(["1:deletion"]);
   });
 
-  test("rename group", () => {
-    expect(detectChangingSteps(["Rename the resource group to archive"])).toEqual([
-      { stepNumber: 1, group: "rename" },
-    ]);
-  });
-
-  test("creation group", () => {
-    expect(detectChangingSteps(["Create a new service principal"])).toEqual([
-      { stepNumber: 1, group: "creation" },
-    ]);
-  });
-
-  test("access change group — grant, revoke and disable", () => {
-    expect(detectChangingSteps(["Grant the engineer group Contributor access"])).toEqual([
-      { stepNumber: 1, group: "access change" },
-    ]);
-    expect(detectChangingSteps(["Revoke the guest user's access"])).toEqual([
-      { stepNumber: 1, group: "access change" },
-    ]);
-    expect(detectChangingSteps(["Disable the delete protection setting"])).toEqual([
-      { stepNumber: 1, group: "access change" },
-    ]);
-  });
-
-  test("matches are whole word and case insensitive", () => {
-    expect(detectChangingSteps(["DELETE the test storage account"])).toEqual([
-      { stepNumber: 1, group: "deletion" },
-    ]);
-    // "Deleted" is not the whole word "delete", so it must not match.
-    expect(detectChangingSteps(["Deleted resources are shown in the audit log"])).toEqual([]);
-  });
-
-  test("a multi line step is assessed by its first line's first word only", () => {
-    const flagged = detectChangingSteps([
-      "Delete the test storage account\nand confirm the prompt",
-      "Screenshot the result\nDelete nothing else",
-    ]);
-
-    expect(flagged).toEqual([{ stepNumber: 1, group: "deletion" }]);
-  });
-
-  test("an empty subtask list returns an empty result", () => {
-    expect(detectChangingSteps([])).toEqual([]);
+  test("a multi line step is searched in full, not just its first line", () => {
+    expect(flags(["Go to the vault\nthen delete it"])).toEqual(["1:deletion"]);
   });
 });
