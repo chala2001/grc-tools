@@ -4,6 +4,7 @@ from pathlib import Path
 import httpx
 
 from wso2_runner import oauth
+from wso2_runner.config import USER_AGENT_HEADER
 
 
 class CloudClient:
@@ -18,7 +19,15 @@ class CloudClient:
         self.base = base_url.rstrip("/")
         self._org = asgardeo_org
         self._client_id = asgardeo_client_id
-        self._http = httpx.AsyncClient(timeout=httpx.Timeout(30.0, read=120.0))
+        # The production edge behind Cloudflare 403s any request whose
+        # User-Agent doesn't carry the curl/ token — see config.py's
+        # USER_AGENT comment. Setting it here, as a client-level default,
+        # means all six task-queue calls below carry it without each one
+        # repeating it; httpx merges this with the per-request
+        # Authorization header each method already sends.
+        self._http = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, read=120.0), headers=USER_AGENT_HEADER
+        )
 
     def _auth_headers(self) -> dict:
         # Cheap in the common case: reads a small local cache file and

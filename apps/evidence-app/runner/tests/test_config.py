@@ -10,6 +10,7 @@ whatever `runner/.env` or `~/.wso2-runner/.env` happens to exist on the
 developer's machine; only the process environment (which monkeypatch
 controls) is read.
 """
+import importlib.metadata
 import os
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from wso2_runner.config import RunnerSettings
+from wso2_runner.config import USER_AGENT, USER_AGENT_HEADER, RunnerSettings, _package_version
 
 # Root of the runner package (one level up from this tests/ directory) —
 # used as the cwd for the subprocess test below, so a plain `import
@@ -171,3 +172,36 @@ def test_azure_auth_mode_rejects_anything_else_and_names_the_valid_values(monkey
     assert "AZURE_OPENAI_AUTH_MODE" in message
     # The engineer has to be able to fix it from the error alone.
     assert "entra" in message and "api_key" in message
+# --- User-Agent (spec chala2001/grc-tools#133) ------------------------------
+
+# --- User-Agent (spec chala2001/grc-tools#133) -------------------------------------------------
+#
+# Production sits behind an edge that 403s a request unless its User-Agent
+# contains the curl/ token alongside our own name — see the comment above
+# USER_AGENT in config.py. The version number in the string changes every
+# release, so these assert on shape (the two required tokens), never on the
+# exact string.
+
+
+def test_user_agent_names_the_runner_and_carries_the_curl_token():
+    """The shared value names the Runner, so its traffic is identifiable in
+    a log, and carries the curl/ token the production edge requires. The
+    version number changes every release, so this asserts the two tokens
+    that matter, never the exact string."""
+    assert USER_AGENT.startswith("wso2-runner/")
+    assert "curl/" in USER_AGENT
+    assert USER_AGENT_HEADER == {"User-Agent": USER_AGENT}
+
+
+def test_missing_package_metadata_falls_back_instead_of_raising(monkeypatch):
+    """A clone that was never `pip install`ed carries no package metadata.
+    USER_AGENT is built at import time, so a raise here would stop the
+    Runner from starting at all — a worse fault than the 403 this whole
+    header exists to fix. The version degrades to a placeholder instead."""
+
+    def fake_version(name):
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(importlib.metadata, "version", fake_version)
+
+    assert _package_version() == "0.0.0-unknown"

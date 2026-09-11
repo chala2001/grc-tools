@@ -1,3 +1,4 @@
+import importlib.metadata
 from pathlib import Path
 from typing import Literal
 
@@ -10,6 +11,36 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 AZURE_AUTH_ENTRA = "entra"
 AZURE_AUTH_API_KEY = "api_key"
 AzureAuthMode = Literal["entra", "api_key"]
+
+
+def _package_version() -> str:
+    """Read the Runner's own version from installed package metadata.
+
+    A plain clone that was never `pip install`ed has no such metadata —
+    that must not stop the Runner from starting, so the
+    PackageNotFoundError is caught here and a fixed placeholder returned
+    instead of raising. Kept as its own function, rather than inlined
+    below, so a test can call it directly against a patched
+    importlib.metadata and exercise that fallback without reimporting this
+    module.
+    """
+    try:
+        return importlib.metadata.version("wso2-compliance-runner")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.0.0-unknown"
+
+
+# The production backend sits behind Cloudflare, which inspects every
+# request's User-Agent header before it ever reaches our backend. A name of
+# our own, sent alone — "wso2-runner/0.1.0", or for that matter
+# "python-requests/2.31.0" or "Go-http-client/1.1" — is read as an
+# unattended script and answered with a 403. curl's own User-Agent is let
+# through untouched, and so is any string that merely contains the "curl/"
+# token alongside our own name. So we send both. Tidy this back down to
+# just our own name and production goes back to refusing every request the
+# Runner makes — see spec chala2001/grc-tools#133.
+USER_AGENT = f"wso2-runner/{_package_version()} curl/8.5.0"
+USER_AGENT_HEADER = {"User-Agent": USER_AGENT}
 
 # Config lives in the user's home dir — works whether installed via pip or cloned.
 # The repo's runner/.env (if present) is loaded first so a clone with that file

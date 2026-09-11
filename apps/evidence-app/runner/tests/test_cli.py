@@ -43,7 +43,7 @@ import wso2_runner.config as config_mod
 from wso2_runner import oauth
 from wso2_runner.azure_credential import ClientAuthenticationError, CredentialUnavailableError
 from wso2_runner.browser_install import ChromiumInstallError
-from wso2_runner.config import settings
+from wso2_runner.config import USER_AGENT, settings
 
 runner = CliRunner()
 
@@ -691,6 +691,33 @@ def test_configure_with_server_follows_redirects(monkeypatch, tmp_path):
     assert seen_kwargs.get("follow_redirects") is True
 
 
+def test_configure_server_lookup_sends_the_user_agent(monkeypatch, tmp_path):
+    """Production's edge 403s a request whose User-Agent lacks the curl/
+    token (spec chala2001/grc-tools#133) — the runner-config lookup that `--server` performs
+    before anything else must carry it, or a fresh machine can never even
+    reach `configure` against production."""
+    cfg_dir = tmp_path / ".wso2-runner"
+    cfg_file = cfg_dir / ".env"
+    monkeypatch.setattr(config_mod, "CONFIG_DIR", cfg_dir)
+    monkeypatch.setattr(config_mod, "CONFIG_FILE", cfg_file)
+
+    seen_kwargs = {}
+
+    def fake_get(url, *a, **k):
+        seen_kwargs.update(k)
+        return _FakeResponse({"asgardeo_org": "wso2", "asgardeo_client_id": "abc-123"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    input_text = "someone@wso2.com\nollama\n\n1\n"
+    result = runner.invoke(
+        cli.app, ["configure", "--server", "https://cloud.example.com"], input=input_text
+    )
+
+    assert result.exit_code == 0, result.output
+    assert seen_kwargs["headers"]["User-Agent"] == USER_AGENT
+
+
 def test_configure_server_values_come_from_response_not_a_stale_file(monkeypatch, tmp_path):
     """The org and client ID written must be whatever the endpoint just
     returned, not whatever happened to already be on disk -- proves the
@@ -911,6 +938,28 @@ def test_doctor_reports_backend_health_and_missing_client_id(monkeypatch):
     assert "Backend connectivity: http://cloud.test" in result.output
     assert "{'status': 'ok'}" in result.output
     assert "ASGARDEO_CLIENT_ID is not set" in result.output
+
+
+def test_doctor_backend_health_check_sends_the_user_agent(monkeypatch):
+    """Production's edge 403s a request whose User-Agent lacks the curl/
+    token (spec chala2001/grc-tools#133) — doctor's [1] backend connectivity check must carry
+    it the same as every other call that reaches the production edge."""
+    seen_kwargs = {}
+
+    def fake_get(url, *a, **k):
+        assert url == "http://cloud.test/health"
+        seen_kwargs.update(k)
+        return _FakeResponse({"status": "ok"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(settings, "ASGARDEO_CLIENT_ID", "")
+    monkeypatch.setattr(settings, "AGENT_PROVIDER", "anthropic")
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "sk-x")
+
+    result = runner.invoke(cli.app, ["doctor", "--server", "http://cloud.test"])
+
+    assert result.exit_code == 0
+    assert seen_kwargs["headers"]["User-Agent"] == USER_AGENT
 
 
 def test_doctor_reports_missing_asgardeo_org(monkeypatch):
@@ -1200,6 +1249,33 @@ def test_doctor_reports_authenticated_user_when_session_cached(monkeypatch):
             return _FakeResponse({"status": "ok"})
         assert url.endswith("/api/me")
         assert k["headers"]["Authorization"] == "Bearer test-token"
+        return _FakeResponse({"email": "someone@wso2.com"})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(settings, "ASGARDEO_CLIENT_ID", "client-123")
+    monkeypatch.setattr(settings, "ASGARDEO_ORG", "test-org")
+    monkeypatch.setattr(settings, "AGENT_PROVIDER", "")
+    monkeypatch.setattr(oauth, "has_cached_session", lambda: True)
+    monkeypatch.setattr(oauth, "get_access_token", lambda org, cid: "test-token")
+
+    result = runner.invoke(cli.app, ["doctor", "--server", "http://cloud.test"])
+
+    assert result.exit_code == 0
+    assert "{'email': 'someone@wso2.com'}" in result.output
+
+
+def test_doctor_identity_check_merges_user_agent_with_the_bearer_token(monkeypatch):
+    """The /api/me call already builds its own headers dict for the bearer
+    token, so adding the User-Agent (spec chala2001/grc-tools#133) risks one replacing the
+    other instead of both going out. This is the only test in the suite
+    that proves the merge: both headers must be present together."""
+
+    def fake_get(url, *a, **k):
+        if url.endswith("/health"):
+            return _FakeResponse({"status": "ok"})
+        assert url.endswith("/api/me")
+        assert k["headers"]["Authorization"] == "Bearer test-token"
+        assert k["headers"]["User-Agent"] == USER_AGENT
         return _FakeResponse({"email": "someone@wso2.com"})
 
     monkeypatch.setattr(httpx, "get", fake_get)

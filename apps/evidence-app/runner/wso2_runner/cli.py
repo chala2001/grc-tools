@@ -29,6 +29,8 @@ def _fetch_server_config(server: str) -> dict[str, str]:
     """
     import httpx
 
+    from wso2_runner.config import USER_AGENT_HEADER
+
     url = f"{server.rstrip('/')}/api/runner-config"
 
     try:
@@ -36,7 +38,9 @@ def _fetch_server_config(server: str) -> dict[str, str]:
         # on http://, or a host that redirects to its canonical address, comes
         # back as a bare 301 and gets reported below as "the backend there may
         # be too old" -- the wrong problem, on the operator's first command.
-        response = httpx.get(url, timeout=5, follow_redirects=True)
+        # User-Agent is required too — production sits behind an edge that
+        # 403s a request without the curl/ token in it, see config.py.
+        response = httpx.get(url, timeout=5, follow_redirects=True, headers=USER_AGENT_HEADER)
     except Exception as exc:
         typer.echo(f"\nCould not reach {url}: {exc}\n", err=True)
         raise typer.Exit(1)
@@ -362,7 +366,7 @@ def doctor(
     import httpx
 
     from wso2_runner import oauth
-    from wso2_runner.config import AZURE_AUTH_API_KEY, settings
+    from wso2_runner.config import AZURE_AUTH_API_KEY, USER_AGENT_HEADER, settings
 
     url = server or settings.CLOUD_URL
 
@@ -372,7 +376,9 @@ def doctor(
     # Check backend
     print(f"\n[1] Backend connectivity: {url}")
     try:
-        r = httpx.get(f"{url}/health", timeout=5)
+        # Same User-Agent requirement as _fetch_server_config above —
+        # production's edge 403s this without the curl/ token.
+        r = httpx.get(f"{url}/health", timeout=5, headers=USER_AGENT_HEADER)
         print(f"    ✓ {r.json()}")
     except Exception as exc:
         print(f"    ✗ {exc}")
@@ -390,7 +396,11 @@ def doctor(
         else:
             try:
                 token = oauth.get_access_token(settings.ASGARDEO_ORG, settings.ASGARDEO_CLIENT_ID)
-                r = httpx.get(f"{url}/api/me", headers={"Authorization": f"Bearer {token}"}, timeout=5)
+                r = httpx.get(
+                    f"{url}/api/me",
+                    headers={"Authorization": f"Bearer {token}", **USER_AGENT_HEADER},
+                    timeout=5,
+                )
                 print(f"    ✓ {r.json()}")
             except Exception as exc:
                 print(f"    ✗ {exc}")
