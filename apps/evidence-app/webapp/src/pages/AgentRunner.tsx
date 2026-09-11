@@ -31,6 +31,7 @@ import { BACKEND_BASE_URL } from "../config/apiConfig";
 import ControlPicker from "../components/ControlPicker";
 import ProductPicker from "../components/ProductPicker";
 import FrameworkPicker from "../components/FrameworkPicker";
+import { computeAgentRunnerFormState } from "../utils/computeAgentRunnerFormState";
 import "../index.css";
 
 // ── Portal presets ────────────────────────────────────────────────────────
@@ -241,6 +242,16 @@ export default function AgentRunner() {
 
   const isDone = taskOut ? ["completed", "failed", "cancelled"].includes(taskOut.status) : false;
   const isRunning = !!taskOut && !isDone;
+
+  // Rendering only — what the form should look like. The polling and SSE
+  // effects below keep consulting isDone/isRunning directly, because they
+  // decide whether to keep talking to the backend, not what's drawn.
+  const formState = computeAgentRunnerFormState({
+    loginDone,
+    taskStatus: taskOut?.status ?? null,
+    queueing,
+    promptEmpty: !prompt.trim(),
+  });
 
   // Poll runner status every 10 s
   useEffect(() => {
@@ -762,7 +773,7 @@ export default function AgentRunner() {
           </FormControl>
 
           {/* ── Agent Settings (collapsible) ──────────────────────────── */}
-          <Box sx={{ opacity: (isRunning || isDone) ? 0.45 : 1, pointerEvents: (isRunning || isDone) ? "none" : "auto" }}>
+          <Box sx={{ opacity: formState.advancedSettingsEditable ? 1 : 0.45, pointerEvents: formState.advancedSettingsEditable ? "auto" : "none" }}>
             <Button
               size="small"
               variant="text"
@@ -899,6 +910,7 @@ export default function AgentRunner() {
             rows={6}
             required
             fullWidth
+            disabled={!formState.promptEditable}
           />
 
           {prompt.trim() && (
@@ -935,11 +947,14 @@ export default function AgentRunner() {
             type="submit"
             variant="contained"
             size="large"
-            disabled={!loginDone || queueing || !prompt.trim() || isRunning || isDone}
-            startIcon={(queueing || isRunning) ? <CircularProgress size={16} color="inherit" /> : <ArrowRightIcon size={18} />}
+            disabled={!formState.primaryActionEnabled}
+            startIcon={formState.primaryAction !== "queue" ? <CircularProgress size={16} color="inherit" /> : <ArrowRightIcon size={18} />}
             sx={{ py: 1.25 }}
           >
-            {queueing ? "Queuing..." : isRunning ? (taskOut?.status === "queued" ? "Queued..." : "Agent running...") : "Queue Task for Runner"}
+            {formState.primaryAction === "queuing" ? "Queuing..." :
+              formState.primaryAction === "waitingForRunner" ? "Queued..." :
+              formState.primaryAction === "runningAgent" ? "Agent running..." :
+              "Queue Task for Runner"}
           </Button>
 
           <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
@@ -962,26 +977,26 @@ export default function AgentRunner() {
             </Box>
           )}
 
-          <Paper variant="outlined" sx={{ mt: 3, p: 2.5, backgroundColor: isDone ? "rgba(255,115,0,0.05)" : "rgba(0,0,0,0.02)" }}>
+          <Paper variant="outlined" sx={{ mt: 3, p: 2.5, backgroundColor: formState.resultPanelAction === "newTask" ? "rgba(255,115,0,0.05)" : "rgba(0,0,0,0.02)" }}>
             <Stack direction={{ xs: "column", sm: "row" }} alignItems={{ xs: "stretch", sm: "center" }} spacing={2}>
               <Box sx={{ flex: 1 }}>
                 <Typography variant="subtitle1" fontWeight={700}>
-                  {isDone ? "Task finished. Queue another?" : "Start a new task?"}
+                  {formState.resultPanelAction === "newTask" ? "Task finished. Queue another?" : "Start a new task?"}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {isDone
+                  {formState.resultPanelAction === "newTask"
                     ? "Your login session and environment context are kept. Just edit the prompt above and run again."
                     : "Clear this task from the view and start fresh. The current task will keep running in the background."}
                 </Typography>
               </Box>
               <Button
-                variant={isDone ? "contained" : "outlined"}
+                variant={formState.resultPanelAction === "newTask" ? "contained" : "outlined"}
                 size="large"
                 onClick={handleNewTask}
                 startIcon={<ArrowRightIcon size={18} />}
                 sx={{ minWidth: 200 }}
               >
-                {isDone ? "New Task" : "Start Fresh"}
+                {formState.resultPanelAction === "newTask" ? "New Task" : "Start Fresh"}
               </Button>
             </Stack>
           </Paper>
