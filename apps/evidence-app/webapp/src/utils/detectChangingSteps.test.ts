@@ -40,6 +40,58 @@ describe("detectChangingSteps", () => {
     expect(flags(["Delete the test user"])).toEqual(["1:deletion"]);
   });
 
+  test("every added verb is matched", () => {
+    const cases: Array<[string, string]> = [
+      ["destroy the vm", "deletion"], ["terminate the instance", "deletion"],
+      ["purge the vault", "deletion"], ["wipe the disk", "deletion"],
+      ["erase the logs", "deletion"], ["drop the table", "deletion"],
+      ["deallocate the vm", "deletion"], ["detach the disk", "deletion"],
+      ["uninstall the agent", "deletion"],
+      ["modify the policy", "update"], ["replace the cert", "update"],
+      ["overwrite the config", "update"], ["reset the password", "update"],
+      ["patch the host", "update"],
+      ["provision a cluster", "creation"], ["deploy the app", "creation"],
+      ["enable the flag", "access change"], ["assign the role", "access change"],
+      ["unassign the role", "access change"], ["rotate the key", "access change"],
+      ["stop the vm", "power change"], ["restart the service", "power change"],
+      ["reboot the host", "power change"], ["shutdown the cluster", "power change"],
+      ["kill the process", "power change"],
+    ];
+    for (const [step, group] of cases) {
+      expect(flags([step])).toEqual([`1:${group}`]);
+    }
+  });
+
+  test("the awkward word forms are spelled the way people type them", () => {
+    // These are the ones a naive generator gets wrong: it would produce
+    // "droping", "modifyed" and "detachs", and the real words would sail
+    // straight past the warning.
+    for (const step of ["dropped the table", "dropping the table", "drops the table"]) {
+      expect(flags([step])).toEqual(["1:deletion"]);
+    }
+    for (const step of ["modified the policy", "modifies the policy", "modifying the policy"]) {
+      expect(flags([step])).toEqual(["1:update"]);
+    }
+    for (const step of ["detaches the disk", "detached the disk"]) {
+      expect(flags([step])).toEqual(["1:deletion"]);
+    }
+    for (const step of ["stopped the vm", "stopping the vm"]) {
+      expect(flags([step])).toEqual(["1:power change"]);
+    }
+    expect(flags(["destroyed the vault"])).toEqual(["1:deletion"]);
+    expect(flags(["deployed the app"])).toEqual(["1:creation"]);
+  });
+
+  test("the three rejected words stay silent", () => {
+    // "change", "set" and "add" turn up in ordinary capture prompts far too
+    // often to be worth a tick. Kept as a test so nobody adds them back
+    // without meeting this.
+    expect(flags(["change the filter to last 30 days"])).toEqual([]);
+    expect(flags(["set the date range to this month"])).toEqual([]);
+    expect(flags(["add a column and screenshot the table"])).toEqual([]);
+    expect(flags(["edit the search box, then screenshot"])).toEqual([]);
+  });
+
   test("one case per verb group", () => {
     expect(flags(["delete the vault"])).toEqual(["1:deletion"]);
     expect(flags(["remove the vault"])).toEqual(["1:deletion"]);

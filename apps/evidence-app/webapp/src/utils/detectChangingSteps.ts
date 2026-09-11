@@ -1,6 +1,12 @@
 // The verb groups a step can fall into. Kept as a union rather than a bare
 // string so a typo in a call site is a compile error, not a silent no-match.
-export type ChangingVerbGroup = "deletion" | "update" | "rename" | "creation" | "access change";
+export type ChangingVerbGroup =
+  | "deletion"
+  | "update"
+  | "rename"
+  | "creation"
+  | "access change"
+  | "power change";
 
 type ChangingVerbGroupRow = {
   group: ChangingVerbGroup;
@@ -28,17 +34,23 @@ type ChangingVerbGroupRow = {
 const CHANGING_VERB_GROUPS: ChangingVerbGroupRow[] = [
   {
     group: "deletion",
-    // Outright destruction. Rarer synonyms ("erase", "wipe", "purge",
-    // "terminate", "destroy") are left out for now — add one with its own
-    // test row when a real prompt wants it.
-    stems: ["delete", "remove"],
+    // Outright destruction, in all the words a console actually uses for
+    // it. "drop" is here for databases and tables; "deallocate", "detach"
+    // and "uninstall" take something away without the word delete ever
+    // appearing.
+    stems: [
+      "delete", "remove", "destroy", "terminate", "purge", "wipe", "erase",
+      "drop", "deallocate", "detach", "uninstall",
+    ],
   },
   {
     group: "update",
-    // Changing something in place. "modify" and "change" are left out: both
-    // turn up constantly in ordinary descriptive text without naming a
-    // console mutation, and matching everywhere makes that cost real.
-    stems: ["update"],
+    // Changing something in place. "change" and "set" are deliberately
+    // absent: "change the filter" and "set the date range" are ordinary
+    // capture instructions, and now that matching is everywhere those two
+    // would fire on a large share of perfectly safe prompts. "edit" is left
+    // out for the same reason, though it is the closest call of the three.
+    stems: ["update", "modify", "replace", "overwrite", "reset", "patch"],
   },
   {
     group: "rename",
@@ -49,27 +61,59 @@ const CHANGING_VERB_GROUPS: ChangingVerbGroupRow[] = [
     // "add" is deliberately absent: it is used loosely for all sorts of non
     // mutating things ("add a bookmark", "add to the list"), and now that
     // matching is everywhere it would fire on far too much.
-    stems: ["create"],
+    stems: ["create", "provision", "deploy"],
   },
   {
     group: "access change",
-    // Handing out, taking away or switching off access. "enable" is left
-    // out: it is also used for turning on read only things like logging.
-    stems: ["grant", "revoke", "disable"],
+    // Handing out, taking away, switching on or switching off. "enable" is
+    // included now: turning something on is a real change to a console even
+    // when what it turns on is read only, and the cost of being wrong is a
+    // tick.
+    stems: ["grant", "revoke", "disable", "enable", "assign", "unassign", "rotate"],
+  },
+  {
+    group: "power change",
+    // Changes nothing stored, but takes a live system down or bounces it,
+    // which is the kind of thing nobody wants to discover was in a prompt
+    // by accident.
+    stems: ["stop", "restart", "reboot", "shutdown", "kill"],
   },
 ];
 
-// Present tense, third person, past and continuous. A stem ending in "e"
-// drops it before "ing" ("delete" gives "deleting", not "deleteing") and
-// takes a bare "d" for the past ("deleted"), which covers every stem above.
+// Present tense, third person, past and continuous, spelled the way English
+// actually spells them. Three ordinary rules cover every stem in the table:
+// a stem ending in "e" drops it before "ing" and takes a bare "d"
+// ("deleting", "deleted"); a stem ending in a consonant then "y" becomes
+// "ied" and "ies" ("modified", "modifies"); and a short stem ending
+// consonant, vowel, consonant doubles that last letter ("dropped",
+// "stopping"). Without those, "modifyed" and "droping" would be generated
+// and the words anyone actually types would never match.
 function wordForms(stem: string): string[] {
-  const endsInE = stem.endsWith("e");
-  return [
-    stem,
-    `${stem}s`,
-    endsInE ? `${stem}d` : `${stem}ed`,
-    `${endsInE ? stem.slice(0, -1) : stem}ing`,
-  ];
+  // "modify" gives "modifies", "patch" and "detach" give "patches" and
+  // "detaches", everything else just takes an "s".
+  const thirdPerson = /[^aeiou]y$/.test(stem)
+    ? `${stem.slice(0, -1)}ies`
+    : /(?:ch|sh|s|x|z)$/.test(stem)
+      ? `${stem}es`
+      : `${stem}s`;
+
+  const forms = [stem, thirdPerson];
+
+  if (stem.endsWith("e")) {
+    forms.push(`${stem}d`, `${stem.slice(0, -1)}ing`);
+    return forms;
+  }
+
+  if (/[^aeiou]y$/.test(stem)) {
+    forms.push(`${stem.slice(0, -1)}ied`, `${stem}ing`);
+    return forms;
+  }
+
+  // Consonant, vowel, consonant at the end, with the last letter not one of
+  // w, x or y, which never double.
+  const doubled = /[^aeiou][aeiou][^aeiouwxy]$/.test(stem) ? stem + stem.slice(-1) : stem;
+  forms.push(`${doubled}ed`, `${doubled}ing`);
+  return forms;
 }
 
 // One regex per group, built once at module load. \b on both sides keeps a
