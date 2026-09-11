@@ -241,11 +241,10 @@ export default function AgentRunner() {
   const maxStepsForComplexity = complexity === "quick" ? 15 : complexity === "thorough" ? 40 : 25;
 
   const isDone = taskOut ? ["completed", "failed", "cancelled"].includes(taskOut.status) : false;
-  const isRunning = !!taskOut && !isDone;
 
   // Rendering only — what the form should look like. The polling and SSE
-  // effects below keep consulting isDone/isRunning directly, because they
-  // decide whether to keep talking to the backend, not what's drawn.
+  // effects below keep consulting isDone directly, because they decide
+  // whether to keep talking to the backend, not what's drawn.
   const formState = computeAgentRunnerFormState({
     loginDone,
     taskStatus: taskOut?.status ?? null,
@@ -485,7 +484,11 @@ export default function AgentRunner() {
 
   const handleQueue = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginDone || !prompt.trim() || isRunning) return;
+    // Refuses whenever the primary button itself would refuse — including
+    // once a task has finished, when the button's face has moved on to New
+    // Task. Keeps the rule in one place (computeAgentRunnerFormState)
+    // instead of restating it here. See chala2001/grc-tools#139.
+    if (formState.primaryAction !== "queue" || !formState.primaryActionEnabled) return;
     setQueueing(true);
     setError(null);
     lastInvalidatedRef.current = 0;
@@ -536,14 +539,17 @@ export default function AgentRunner() {
   };
 
   const handleNewTask = () => {
-    clearSessionState("taskId", "taskOut", "prompt", "productId", "frameworkId", "controlId", "title", "useVision", "maxActionsPerStep");
+    // Clears the finished Agent Task from view only — the prompt, the linked
+    // Control (and its Framework/Product), the title and the advanced
+    // settings are left exactly as they are, so the bottom panel's "edit the
+    // prompt above and run again" is actually true. useVision and
+    // maxActionsPerStep used to be dropped from session storage here without
+    // their state being reset, so they stayed on screen and then quietly
+    // reverted on the next reload; they are simply left alone now. See
+    // chala2001/grc-tools#139.
+    clearSessionState("taskId", "taskOut");
     setTaskId(null);
     setTaskOut(null);
-    setPrompt("");
-    setProductId("");
-    setFrameworkId("");
-    setControlId("");
-    setTitle("");
     setError(null);
     lastInvalidatedRef.current = 0;
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -943,24 +949,38 @@ export default function AgentRunner() {
 
           {error && <Alert severity="error">{error}</Alert>}
 
+          {/* type/onClick depend on the face this control is showing: a
+              submit button while it's offering to queue (so Enter in the
+              form and a press both route through handleQueue), but an
+              ordinary button when it's offering New Task, so a press can't
+              fall through to the form's submit event. See
+              chala2001/grc-tools#139. */}
           <Button
-            type="submit"
+            type={formState.primaryAction === "newTask" ? "button" : "submit"}
+            onClick={formState.primaryAction === "newTask" ? handleNewTask : undefined}
             variant="contained"
             size="large"
             disabled={!formState.primaryActionEnabled}
-            startIcon={formState.primaryAction !== "queue" ? <CircularProgress size={16} color="inherit" /> : <ArrowRightIcon size={18} />}
+            startIcon={
+              formState.primaryAction === "queue" || formState.primaryAction === "newTask"
+                ? <ArrowRightIcon size={18} />
+                : <CircularProgress size={16} color="inherit" />
+            }
             sx={{ py: 1.25 }}
           >
             {formState.primaryAction === "queuing" ? "Queuing..." :
               formState.primaryAction === "waitingForRunner" ? "Queued..." :
               formState.primaryAction === "runningAgent" ? "Agent running..." :
+              formState.primaryAction === "newTask" ? "New Task" :
               "Queue Task for Runner"}
           </Button>
 
           <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center" }}>
-            {loginDone
-              ? "The task is added to the queue. Your local runner picks it up and reuses your logged-in browser session."
-              : 'Complete Step 1 and click "I\'ve logged in" above to unlock this form.'}
+            {!loginDone
+              ? 'Complete Step 1 and click "I\'ve logged in" above to unlock this form.'
+              : formState.primaryAction === "newTask"
+                ? "This run is finished. Start a new task to run again, with your prompt and login session kept."
+                : "The task is added to the queue. Your local runner picks it up and reuses your logged-in browser session."}
             <br />Max steps this run: <strong>{maxStepsForComplexity}</strong> ({complexity})
           </Typography>
         </Stack>

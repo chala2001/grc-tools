@@ -4,10 +4,11 @@
 export type AgentRunnerTaskStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
 // What the primary button on the run form is offering right now. "queue" is
-// the resting state — everything else is something already in flight, which
-// is also, today, exactly when the button shows a spinner instead of the
-// arrow icon.
-export type AgentRunnerPrimaryAction = "queue" | "queuing" | "waitingForRunner" | "runningAgent";
+// the resting state — everything else is either something already in flight
+// (which is also, today, exactly when the button shows a spinner instead of
+// the arrow icon) or, for "newTask", a finished task waiting to be cleared —
+// see ticket chala2001/grc-tools#139.
+export type AgentRunnerPrimaryAction = "queue" | "queuing" | "waitingForRunner" | "runningAgent" | "newTask";
 
 export type ComputeAgentRunnerFormStateArgs = {
   // Whether the Engineer has clicked "I've logged in" for Step 1.
@@ -22,11 +23,11 @@ export type ComputeAgentRunnerFormStateArgs = {
 };
 
 export type AgentRunnerFormState = {
-  // Whether the prompt field accepts typing. Always true today — the run
-  // form has never locked the prompt. It's part of this shape because the
-  // next ticket (chala2001/grc-tools#139) makes it false once a task has finished; carrying the
-  // field now means that change is a one-line edit to this function instead
-  // of a new call site in the page.
+  // Whether the prompt field accepts typing. False once a task has finished
+  // — there is nothing left to queue against, so the box says so rather than
+  // accepting text it can't submit. True the rest of the time, including
+  // while a task is queued or running: a run takes minutes and drafting the
+  // next prompt during one is worth keeping. See chala2001/grc-tools#139.
   promptEditable: boolean;
   // Whether the Advanced settings panel can be opened and its controls
   // changed. False while a task is running or has finished, so a setting
@@ -67,19 +68,36 @@ export function computeAgentRunnerFormState({
   const isDone = taskStatus !== null && ["completed", "failed", "cancelled"].includes(taskStatus);
   const isRunning = taskStatus !== null && !isDone;
 
-  const primaryAction: AgentRunnerPrimaryAction = queueing
-    ? "queuing"
-    : isRunning
-      ? taskStatus === "queued"
-        ? "waitingForRunner"
-        : "runningAgent"
-      : "queue";
+  // A finished task takes over the primary button's face before "in flight"
+  // is even considered — the two can't be true together (queueing only
+  // happens with no task, or a fresh one, in view), but isDone wins if it
+  // ever did.
+  const primaryAction: AgentRunnerPrimaryAction = isDone
+    ? "newTask"
+    : queueing
+      ? "queuing"
+      : isRunning
+        ? taskStatus === "queued"
+          ? "waitingForRunner"
+          : "runningAgent"
+        : "queue";
+
+  // "newTask" skips the queue guards that have nothing to do with it — an
+  // empty prompt and a request already in flight don't stop a finished task
+  // being cleared. It still needs loginDone, because the whole form is made
+  // unclickable without it: an enabled button inside an unclickable form
+  // looks pressable and isn't, which is worse than a disabled one. The
+  // button below the result stays available either way. See
+  // chala2001/grc-tools#139.
+  const primaryActionEnabled = isDone
+    ? loginDone
+    : loginDone && !promptEmpty && !queueing && !isRunning;
 
   return {
-    promptEditable: true,
+    promptEditable: !isDone,
     advancedSettingsEditable: !isRunning && !isDone,
     primaryAction,
-    primaryActionEnabled: loginDone && !promptEmpty && !queueing && !isRunning && !isDone,
+    primaryActionEnabled,
     resultPanelAction: isDone ? "newTask" : "startFresh",
   };
 }

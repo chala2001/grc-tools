@@ -88,7 +88,7 @@ describe("computeAgentRunnerFormState", () => {
     expect(state.resultPanelAction).toBe("startFresh");
   });
 
-  test("task completed — the primary action reverts to queue, but stays disabled, and the result panel offers a new task", () => {
+  test("task completed — the primary action flips to new task, enabled, prompt locks, and the result panel offers a new task", () => {
     const state = computeAgentRunnerFormState({
       loginDone: true,
       taskStatus: "completed",
@@ -96,10 +96,10 @@ describe("computeAgentRunnerFormState", () => {
       promptEmpty: false,
     });
 
-    expect(state.promptEditable).toBe(true);
+    expect(state.promptEditable).toBe(false);
     expect(state.advancedSettingsEditable).toBe(false);
-    expect(state.primaryAction).toBe("queue");
-    expect(state.primaryActionEnabled).toBe(false);
+    expect(state.primaryAction).toBe("newTask");
+    expect(state.primaryActionEnabled).toBe(true);
     expect(state.resultPanelAction).toBe("newTask");
   });
 
@@ -111,9 +111,10 @@ describe("computeAgentRunnerFormState", () => {
       promptEmpty: false,
     });
 
+    expect(state.promptEditable).toBe(false);
     expect(state.advancedSettingsEditable).toBe(false);
-    expect(state.primaryAction).toBe("queue");
-    expect(state.primaryActionEnabled).toBe(false);
+    expect(state.primaryAction).toBe("newTask");
+    expect(state.primaryActionEnabled).toBe(true);
     expect(state.resultPanelAction).toBe("newTask");
   });
 
@@ -125,9 +126,57 @@ describe("computeAgentRunnerFormState", () => {
       promptEmpty: false,
     });
 
+    expect(state.promptEditable).toBe(false);
     expect(state.advancedSettingsEditable).toBe(false);
-    expect(state.primaryAction).toBe("queue");
-    expect(state.primaryActionEnabled).toBe(false);
+    expect(state.primaryAction).toBe("newTask");
+    expect(state.primaryActionEnabled).toBe(true);
     expect(state.resultPanelAction).toBe("newTask");
+  });
+
+  test("task completed with an empty prompt — new task is still enabled, since an empty prompt has nothing to do with clearing a finished task", () => {
+    const state = computeAgentRunnerFormState({
+      loginDone: true,
+      taskStatus: "completed",
+      queueing: false,
+      promptEmpty: true,
+    });
+
+    expect(state.promptEditable).toBe(false);
+    expect(state.primaryAction).toBe("newTask");
+    expect(state.primaryActionEnabled).toBe(true);
+  });
+
+  test("task completed but sign in unconfirmed — new task is offered but disabled, because the whole form is unclickable without it", () => {
+    const state = computeAgentRunnerFormState({
+      loginDone: false,
+      taskStatus: "completed",
+      queueing: false,
+      promptEmpty: false,
+    });
+
+    expect(state.primaryAction).toBe("newTask");
+    expect(state.primaryActionEnabled).toBe(false);
+  });
+
+  test("the primary action flips to new task exactly when a task reaches a finished status", () => {
+    const statuses: Array<{ status: "queued" | "running" | "completed" | "failed" | "cancelled" | null; expectNewTask: boolean }> = [
+      { status: null, expectNewTask: false },
+      { status: "queued", expectNewTask: false },
+      { status: "running", expectNewTask: false },
+      { status: "completed", expectNewTask: true },
+      { status: "failed", expectNewTask: true },
+      { status: "cancelled", expectNewTask: true },
+    ];
+
+    for (const { status, expectNewTask } of statuses) {
+      const state = computeAgentRunnerFormState({
+        loginDone: true,
+        taskStatus: status,
+        queueing: false,
+        promptEmpty: false,
+      });
+      expect(state.primaryAction === "newTask").toBe(expectNewTask);
+      expect(state.promptEditable).toBe(!expectNewTask);
+    }
   });
 });
