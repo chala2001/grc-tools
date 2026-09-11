@@ -25,6 +25,7 @@ import Divider from "@mui/material/Divider";
 import Switch from "@mui/material/Switch";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Collapse from "@mui/material/Collapse";
+import Checkbox from "@mui/material/Checkbox";
 import { BoltIcon, ArrowRightIcon, CircleCheckFilledIcon, LightbulbOnIcon, XMarkIcon } from "@oxygen-ui/react-icons";
 import { agentApi, getAuthToken } from "../api/client";
 import { BACKEND_BASE_URL } from "../config/apiConfig";
@@ -32,6 +33,7 @@ import ControlPicker from "../components/ControlPicker";
 import ProductPicker from "../components/ProductPicker";
 import FrameworkPicker from "../components/FrameworkPicker";
 import { computeAgentRunnerFormState } from "../utils/computeAgentRunnerFormState";
+import { detectChangingSteps, type ChangingStepFlag } from "../utils/detectChangingSteps";
 import "../index.css";
 
 // ── Portal presets ────────────────────────────────────────────────────────
@@ -97,6 +99,30 @@ function parseSubtasksClient(prompt: string): string[] {
   if (current.length) tasks.push(current);
   const joined = tasks.map((t) => t.join("\n").trim()).filter(Boolean);
   return joined.length ? joined : prompt.trim() ? [prompt.trim()] : [];
+}
+
+// ── Changing step banner text ───────────────────────────────────────────────
+// Turns detectChangingSteps' plain data into the sentence shown above the
+// primary button. Never echoes the prompt text — only step numbers and verb
+// group names, both of which are safe and short. See chala2001/grc-tools#140.
+
+function joinWithAnd(items: string[]): string {
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+function describeChangingSteps(flagged: ChangingStepFlag[]): string {
+  const numbers = flagged.map((f) => f.stepNumber);
+  const groups = Array.from(new Set(flagged.map((f) => f.group)));
+  const stepWord = numbers.length === 1 ? "Step" : "Steps";
+  const stepList = joinWithAnd(numbers.map(String));
+  const verb = numbers.length === 1 ? "looks like it changes" : "look like they change";
+  return (
+    `${stepWord} ${stepList} ${verb} something (${joinWithAnd(groups)}). ` +
+    "The Runner acts in your own signed in browser and can carry this out for real. " +
+    "Evidence capture only needs to view and screenshot."
+  );
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -237,10 +263,25 @@ export default function AgentRunner() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpSeen, setHelpSeen] = useSessionState<boolean>("helpSeen", false);
 
+  // The exact prompt text the Engineer last ticked the changing step
+  // checkbox for, or null before any tick. Deliberately plain useState, not
+  // useSessionState: a prompt restored after a reload must be presented for
+  // a fresh decision, not arrive already acknowledged. Deliberately not a
+  // boolean flag either — "acknowledged" is derived below by comparing this
+  // against the current prompt, so editing the prompt clears it with no
+  // extra bookkeeping. See chala2001/grc-tools#140.
+  const [acknowledgedPrompt, setAcknowledgedPrompt] = useState<string | null>(null);
+
   const parsedTasks = parseSubtasksClient(prompt);
   const maxStepsForComplexity = complexity === "quick" ? 15 : complexity === "thorough" ? 40 : 25;
 
   const isDone = taskOut ? ["completed", "failed", "cancelled"].includes(taskOut.status) : false;
+
+  // Steps that look like they change something, from the same parsed list
+  // rendered below — never re-parses the prompt itself. See
+  // chala2001/grc-tools#140.
+  const changingSteps = detectChangingSteps(parsedTasks);
+  const changingStepsAcknowledged = acknowledgedPrompt === prompt;
 
   // Rendering only — what the form should look like. The polling and SSE
   // effects below keep consulting isDone directly, because they decide
@@ -250,6 +291,7 @@ export default function AgentRunner() {
     taskStatus: taskOut?.status ?? null,
     queueing,
     promptEmpty: !prompt.trim(),
+    unacknowledgedChangingSteps: changingSteps.length > 0 && !changingStepsAcknowledged,
   });
 
   // Poll runner status every 10 s
@@ -948,6 +990,27 @@ export default function AgentRunner() {
           )}
 
           {error && <Alert severity="error">{error}</Alert>}
+
+          {/* Only shown while the form can actually queue — a finished,
+              locked task has nothing left for this warning to govern, and
+              formState.promptEditable is false in exactly that state. See
+              chala2001/grc-tools#140. */}
+          {formState.promptEditable && changingSteps.length > 0 && (
+            <Alert severity="warning">
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                {describeChangingSteps(changingSteps)}
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={changingStepsAcknowledged}
+                    onChange={(e) => setAcknowledgedPrompt(e.target.checked ? prompt : null)}
+                  />
+                }
+                label="I have checked this and want to run it anyway."
+              />
+            </Alert>
+          )}
 
           {/* type/onClick depend on the face this control is showing: a
               submit button while it's offering to queue (so Enter in the

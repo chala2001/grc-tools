@@ -20,6 +20,12 @@ export type ComputeAgentRunnerFormStateArgs = {
   queueing: boolean;
   // Whether the prompt field is blank (after trimming).
   promptEmpty: boolean;
+  // Whether the prompt has a step that looks like it changes something
+  // (detectChangingSteps found one) that the Engineer has not yet
+  // acknowledged for the CURRENT prompt text. Ignored once a task is
+  // finished — a locked prompt has nothing left for the warning to govern.
+  // See chala2001/grc-tools#140.
+  unacknowledgedChangingSteps: boolean;
 };
 
 export type AgentRunnerFormState = {
@@ -64,6 +70,7 @@ export function computeAgentRunnerFormState({
   taskStatus,
   queueing,
   promptEmpty,
+  unacknowledgedChangingSteps,
 }: ComputeAgentRunnerFormStateArgs): AgentRunnerFormState {
   const isDone = taskStatus !== null && ["completed", "failed", "cancelled"].includes(taskStatus);
   const isRunning = taskStatus !== null && !isDone;
@@ -83,15 +90,17 @@ export function computeAgentRunnerFormState({
         : "queue";
 
   // "newTask" skips the queue guards that have nothing to do with it — an
-  // empty prompt and a request already in flight don't stop a finished task
-  // being cleared. It still needs loginDone, because the whole form is made
-  // unclickable without it: an enabled button inside an unclickable form
-  // looks pressable and isn't, which is worse than a disabled one. The
-  // button below the result stays available either way. See
-  // chala2001/grc-tools#139.
+  // empty prompt, a request already in flight and an unacknowledged
+  // changing step don't stop a finished task being cleared: there's no
+  // prompt left to queue against, so nothing about its text still matters.
+  // It still needs loginDone, because the whole form is made unclickable
+  // without it: an enabled button inside an unclickable form looks
+  // pressable and isn't, which is worse than a disabled one. The button
+  // below the result stays available either way. See
+  // chala2001/grc-tools#139 and chala2001/grc-tools#140.
   const primaryActionEnabled = isDone
     ? loginDone
-    : loginDone && !promptEmpty && !queueing && !isRunning;
+    : loginDone && !promptEmpty && !queueing && !isRunning && !unacknowledgedChangingSteps;
 
   return {
     promptEditable: !isDone,

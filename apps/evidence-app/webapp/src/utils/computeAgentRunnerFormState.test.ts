@@ -8,6 +8,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: null,
       queueing: false,
       promptEmpty: false,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.promptEditable).toBe(true);
@@ -23,6 +24,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: null,
       queueing: false,
       promptEmpty: true,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.promptEditable).toBe(true);
@@ -37,6 +39,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: null,
       queueing: false,
       promptEmpty: false,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.advancedSettingsEditable).toBe(true);
@@ -51,6 +54,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: null,
       queueing: true,
       promptEmpty: false,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.primaryAction).toBe("queuing");
@@ -64,6 +68,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: "queued",
       queueing: false,
       promptEmpty: false,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.promptEditable).toBe(true);
@@ -79,6 +84,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: "running",
       queueing: false,
       promptEmpty: false,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.promptEditable).toBe(true);
@@ -94,6 +100,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: "completed",
       queueing: false,
       promptEmpty: false,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.promptEditable).toBe(false);
@@ -109,6 +116,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: "failed",
       queueing: false,
       promptEmpty: false,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.promptEditable).toBe(false);
@@ -124,6 +132,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: "cancelled",
       queueing: false,
       promptEmpty: false,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.promptEditable).toBe(false);
@@ -139,6 +148,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: "completed",
       queueing: false,
       promptEmpty: true,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.promptEditable).toBe(false);
@@ -152,6 +162,7 @@ describe("computeAgentRunnerFormState", () => {
       taskStatus: "completed",
       queueing: false,
       promptEmpty: false,
+      unacknowledgedChangingSteps: false,
     });
 
     expect(state.primaryAction).toBe("newTask");
@@ -174,9 +185,49 @@ describe("computeAgentRunnerFormState", () => {
         taskStatus: status,
         queueing: false,
         promptEmpty: false,
+        unacknowledgedChangingSteps: false,
       });
       expect(state.primaryAction === "newTask").toBe(expectNewTask);
       expect(state.promptEditable).toBe(!expectNewTask);
     }
+  });
+
+  test("an unacknowledged changing step refuses the primary action even though everything else is ready", () => {
+    const state = computeAgentRunnerFormState({
+      loginDone: true,
+      taskStatus: null,
+      queueing: false,
+      promptEmpty: false,
+      unacknowledgedChangingSteps: true,
+    });
+
+    expect(state.primaryAction).toBe("queue");
+    expect(state.primaryActionEnabled).toBe(false);
+  });
+
+  test("an acknowledged changing step does not refuse the primary action", () => {
+    const state = computeAgentRunnerFormState({
+      loginDone: true,
+      taskStatus: null,
+      queueing: false,
+      promptEmpty: false,
+      unacknowledgedChangingSteps: false,
+    });
+
+    expect(state.primaryAction).toBe("queue");
+    expect(state.primaryActionEnabled).toBe(true);
+  });
+
+  test("a finished task ignores an unacknowledged changing step entirely — new task stays enabled", () => {
+    const state = computeAgentRunnerFormState({
+      loginDone: true,
+      taskStatus: "completed",
+      queueing: false,
+      promptEmpty: false,
+      unacknowledgedChangingSteps: true,
+    });
+
+    expect(state.primaryAction).toBe("newTask");
+    expect(state.primaryActionEnabled).toBe(true);
   });
 });
