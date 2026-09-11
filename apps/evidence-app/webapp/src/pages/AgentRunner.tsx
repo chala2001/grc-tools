@@ -113,13 +113,16 @@ function joinWithAnd(items: string[]): string {
 }
 
 function describeChangingSteps(flagged: ChangingStepFlag[]): string {
-  const numbers = flagged.map((f) => f.stepNumber);
+  // Deliberately does NOT name the step number, even though
+  // detectChangingSteps reports one. The number is the position in the
+  // PARSED list, and the parser only splits a numbered line when there is a
+  // space after the marker — so a prompt typed "1.foo" over two lines is one
+  // step, and a banner saying "Step 1" reads as wrong to someone who just
+  // typed a "2." they can see. Naming no step is never wrong; the prompt is
+  // right there to read.
   const groups = Array.from(new Set(flagged.map((f) => f.group)));
-  const stepWord = numbers.length === 1 ? "Step" : "Steps";
-  const stepList = joinWithAnd(numbers.map(String));
-  const verb = numbers.length === 1 ? "looks like it changes" : "look like they change";
   return (
-    `${stepWord} ${stepList} ${verb} something (${joinWithAnd(groups)}). ` +
+    `This prompt looks like it changes something (${joinWithAnd(groups)}). ` +
     "The Runner acts in your own signed in browser and can carry this out for real. " +
     "Evidence capture only needs to view and screenshot."
   );
